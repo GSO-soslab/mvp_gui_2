@@ -1,58 +1,178 @@
+<!-- Add a button to switch map sources -->
+<button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online Map</button>
+
 <div id="map" class="map"></div>
 
 <style>
-    /* All your existing CSS styles for markers remain the same */
-    .cWpt-custom-marker { display: flex; flex-direction: column; align-items: center; }
-    .cWpt-triangle { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 10px solid #f9f10c; }
-    .cWpt-id-display { margin-top: 10px; font-size: 15px; color: #fffca0; background: transparent; padding: 0px 0px; }
-    .cWpt-altitude-display { margin-top: 0px; font-size: 12px; color: #fffca0; background: transparent; padding: 0px 10px; }
-    .wpt-custom-marker { display: flex; flex-direction: column; align-items: center; }
-    .wpt-diamond { width: 23px; height: 23px; background-color: #ff190a; transform: rotate(45deg); position: relative; margin-bottom: 10px; padding: 10px 10px; }
-    .wpt-id-display { margin-top: 10px; font-size: 15px; color: #fba5b0; background: transparent; padding: 0px 10px; text-align: center; }
-    .wpt-altitude-display { margin-top: 35px; font-size: 13px; color: #fba5b0; background: transparent; padding: 0px 1px; text-align: center; }
-    .marker-container { display: flex; flex-direction: column; align-items: center; position: relative; }
-    .arrow-marker { width: 40px; height: 40px; background: url('{{ url_for('static', filename='icons/white_arrow.png') }}') no-repeat center center; background-size: contain; transform-origin: center; }
-    .groundstation-marker { width: 45px; height: 45px; background: url('{{ url_for('static', filename='icons/ground_station_icon.png') }}') no-repeat center center; background-size: contain; transform-origin: center; }
-    .secondary-marker { width: 20px; height: 20px; background-color: blue; border-radius: 50%; }
-    .vehicle-altitude-display { margin-top: -5px; font-size: 13px; color: #d1feb3; background: transparent; padding: 0px 0px; text-align: center; position: absolute; top: 100%; }
-    .altitude-marker { margin-top: -25px; display: inline-block; text-align: center; white-space: nowrap; color: #87ceff; font-size: 13px; background: transparent; padding: 0px 0px; }
+    /* --- Styles for Published Waypoints (Yellow Triangles) --- */
+    .published-wpt-marker {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .published-wpt-triangle {
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 14px solid #ffd500;
+        /* Yellow */
+    }
+
+    .published-wpt-id {
+        font-size: 14px;
+        color: #fffca0;
+        background: transparent;
+        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+    }
+
+    /* --- Styles for Editable Waypoints (Red Diamonds) --- */
+    .editable-wpt-marker {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        /* Set a default stacking order */
+        z-index: 10;
+    }
+
+    .editable-wpt-diamond {
+        width: 23px;
+        height: 23px;
+        background-color: #ff190a;
+        /* Red */
+        transform: rotate(45deg);
+        transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+        /* Smooth transition */
+    }
+
+    .editable-wpt-id {
+        font-size: 15px;
+        color: #fba5b0;
+        background: transparent;
+        transform: rotate(-45deg);
+        position: absolute;
+        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+    }
+
+    /* --- Style for when a waypoint is being dragged --- */
+    .editable-wpt-marker.marker-dragging {
+        /* Bring the dragged marker to the front */
+        z-index: 20;
+    }
+
+    .editable-wpt-marker.marker-dragging .editable-wpt-diamond {
+        transform: rotate(45deg) scale(1.3);
+        /* Make it bigger */
+        box-shadow: 0 0 10px 3px rgba(255, 25, 10, 0.7);
+        /* Add a red glow */
+    }
+
+    /* --- Style for Altitude Labels on Lines --- */
+    .altitude-label-marker {
+        font-size: 12px;
+        font-weight: bold;
+        text-align: center;
+        background: transparent;
+        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        /* Set z-index to ensure labels are above lines but below markers */
+        z-index: 5;
+    }
+
+    /* --- Common & Vehicle Marker Styles --- */
+    .marker-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+    }
+
+    .arrow-marker {
+        width: 40px;
+        height: 40px;
+        background: url('{{ url_for('static', filename='icons/white_arrow.png') }}') no-repeat center center;
+        background-size: contain;
+        transform-origin: center;
+    }
+
+    .groundstation-marker,
+    .secondary-marker {
+        background-size: contain;
+        transform-origin: center;
+    }
+
+    .groundstation-marker {
+        width: 45px;
+        height: 45px;
+        background-image: url('{{ url_for('static', filename='icons/ground_station_icon.png') }}');
+    }
+
+    .secondary-marker {
+        width: 20px;
+        height: 20px;
+        background-color: blue;
+        border-radius: 50%;
+    }
+
+    .vehicle-altitude-display {
+        margin-top: -5px;
+        font-size: 13px;
+        color: #d1feb3;
+        background: transparent;
+        position: absolute;
+        top: 100%;
+        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+    }
 </style>
 
 <script>
-    const isDragging = false; // Dragging flag
+    // --- Global State & Configuration ---
+    let map;
+    let isMapInitialized = false;
+    const MAX_HISTORY_POINTS = 50;
 
     // --- Client-Side Data Stores ---
-    const MAX_HISTORY_POINTS = 50; // Keep the last 50 points for the trail
-    let vehiclePoseHistory = [];
-    let topsidePoseHistory = [];
-    let secondaryPoseHistory = [];
-    
-    // Initial data from server (only for non-real-time elements)
-    const waypointsData = {{ items_jsn | safe }};
-    const currentWaypointsData = {{ citems_jsn | safe }};
-    const initialVehicleData = {{ vehicle_jsn | safe }};
-
-    // --- Map Initialization ---
-    const serverIp = "{{ host_ip }}";
-    const map = new maplibregl.Map({
-        container: 'map',
+    let mapState = {
+        isOnline: false,
         zoom: 19,
-        center: [initialVehicleData.lon, initialVehicleData.lat],
-        style: {
-            "version": 8,
-            "sources": { "local-tiles": { "type": "raster", "tiles": [`http://${serverIp}:5000/tiles/{z}/{x}/{y}.png`], "tileSize": 256 } },
-            "layers": [{ "id": "local-tiles-layer", "type": "raster", "source": "local-tiles" }]
-        }
-    });
-    map.addControl(new maplibregl.NavigationControl());
-    
-    // --- Marker Initialization ---
-    const vehicleMarker = new maplibregl.Marker({ element: createVehicleMarkerElement(), draggable: false }).setLngLat([0,0]).addTo(map);
-    const topsideMarker = new maplibregl.Marker({ element: createGroundStationElement(), draggable: false }).setLngLat([0,0]).addTo(map);
-    const secondaryMarker = new maplibregl.Marker({ element: createSecondaryElement(), draggable: false }).setLngLat([0,0]).addTo(map);
-    let waypointMarkers = [];
+        center: [{{ vehicle_jsn.lon | default(0) }}, {{ vehicle_jsn.lat | default (0) }}],
+    vehicleHistory: [],
+        topsideHistory: [],
+            secondaryHistory: [],
+                publishedPath: [],
+                    publishedLineCoords: [] // Stores the final, static line coordinates
+    };
 
-    // --- Helper Functions to Create Marker HTML ---
+    const editableWaypointsData = {{ items_jsn | safe }};
+    const serverIp = "{{ host_ip }}";
+
+    // --- Marker Storage ---
+    let vehicleMarker, topsideMarker, secondaryMarker;
+    let editableWaypointMarkers = [];
+    let publishedWaypointMarkers = [];
+    let editableAltitudeMarkers = [];
+    let publishedAltitudeMarkers = [];
+
+    // --- Helper Functions ---
+    function calculateMidpoint(p1, p2) {
+        return {
+            latitude: (p1.latitude + p2.latitude) / 2,
+            longitude: (p1.longitude + p2.longitude) / 2,
+            altitude: p2.altitude // Altitude of the destination point
+        };
+    }
+
+    function createAltitudeLabel(midpoint, color) {
+        const el = document.createElement('div');
+        el.className = 'altitude-label-marker';
+        el.style.color = color;
+        el.innerText = `${midpoint.altitude.toFixed(1)}m`;
+
+        return new maplibregl.Marker({ element: el, anchor: 'center' })
+            .setLngLat([midpoint.longitude, midpoint.latitude])
+            .addTo(map);
+    }
+
     function createVehicleMarkerElement() {
         const container = document.createElement('div');
         container.className = 'marker-container';
@@ -73,91 +193,269 @@
         el.className = 'secondary-marker';
         return el;
     }
-
-    // --- WebSocket Event Handlers ---
-    socket.on('vehicle_pose_update', (data) => {
-        updateVehicle(data);
-        updateHistory(vehiclePoseHistory, data);
-        redrawAllTrails();
-    });
-    socket.on('topside_pose_update', (data) => {
-        topsideMarker.setLngLat([data.lon, data.lat]);
-        updateHistory(topsidePoseHistory, data);
-        redrawAllTrails();
-    });
-    socket.on('secondary_pose_update', (data) => {
-        secondaryMarker.setLngLat([data.lon, data.lat]);
-        updateHistory(secondaryPoseHistory, data);
-        redrawAllTrails();
-    });
-    
-    function updateVehicle(data) {
-        vehicleMarker.setLngLat([data.lon, data.lat]);
-        const markerElement = vehicleMarker.getElement();
-        markerElement.querySelector('.arrow-marker').style.transform = `rotate(${90 - data.yaw}deg)`;
-        markerElement.querySelector('.vehicle-altitude-display').innerText = `Altitude: ${data.alt.toFixed(2)}m`;
+    function createEditableWaypointMarkerElement(item) {
+        const markerElement = document.createElement('div');
+        markerElement.className = 'editable-wpt-marker';
+        const diamond = document.createElement('div');
+        diamond.className = 'editable-wpt-diamond';
+        const idDisplay = document.createElement('div');
+        idDisplay.className = 'editable-wpt-id';
+        idDisplay.innerText = item.id;
+        diamond.appendChild(idDisplay);
+        markerElement.appendChild(diamond);
+        markerElement.dataset.altitude = item.alt;
+        return markerElement;
+    }
+    function createPublishedWaypointMarkerElement(item, index) {
+        const markerElement = document.createElement('div');
+        markerElement.className = 'published-wpt-marker';
+        const triangle = document.createElement('div');
+        triangle.className = 'published-wpt-triangle';
+        const idDisplay = document.createElement('div');
+        idDisplay.className = 'published-wpt-id';
+        idDisplay.innerText = index + 1;
+        markerElement.append(triangle, idDisplay);
+        return markerElement;
     }
 
-    function updateHistory(historyArray, data) {
-        historyArray.push([data.lon, data.lat]);
-        if (historyArray.length > MAX_HISTORY_POINTS) {
-            historyArray.shift(); // Remove the oldest point
+    // --- Functions to save and load state from sessionStorage ---
+    function saveMapState() {
+        if (!isMapInitialized || !map) return;
+        const currentState = {
+            isInitialized: true,
+            isOnline: mapState.isOnline,
+            zoom: map.getZoom(),
+            center: map.getCenter(),
+            vehicleHistory: mapState.vehicleHistory,
+            topsideHistory: mapState.topsideHistory,
+            secondaryHistory: mapState.secondaryHistory,
+            publishedPath: mapState.publishedPath,
+            publishedLineCoords: mapState.publishedLineCoords
+        };
+        sessionStorage.setItem('mapState', JSON.stringify(currentState));
+    }
+
+    function loadMapState() {
+        const savedStateJSON = sessionStorage.getItem('mapState');
+        if (savedStateJSON) {
+            const savedState = JSON.parse(savedStateJSON);
+            if (savedState.isInitialized) {
+                mapState.isOnline = savedState.isOnline;
+                mapState.zoom = savedState.zoom;
+                mapState.center = [savedState.center.lng, savedState.center.lat];
+                mapState.vehicleHistory = savedState.vehicleHistory || [];
+                mapState.topsideHistory = savedState.topsideHistory || [];
+                mapState.secondaryHistory = savedState.secondaryHistory || [];
+                mapState.publishedPath = savedState.publishedPath || [];
+                mapState.publishedLineCoords = savedState.publishedLineCoords || [];
+                initializeMap();
+            }
+        }
+    }
+
+    // --- Map Initialization Logic ---
+    function initializeMap() {
+        if (map) return;
+        const mapStyle = mapState.isOnline
+            ? 'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK'
+            : { "version": 8, "sources": { "local-tiles": { "type": "raster", "tiles": [`http://${serverIp}:5000/tiles/{z}/{x}/{y}.png`], "tileSize": 256 } }, "layers": [{ "id": "local-tiles-layer", "type": "raster", "source": "local-tiles" }] };
+        map = new maplibregl.Map({ container: 'map', zoom: mapState.zoom, center: mapState.center, style: mapStyle });
+        isMapInitialized = true;
+        document.getElementById('map-switch-button').textContent = mapState.isOnline ? 'Switch to Offline Map' : 'Switch to Online Map';
+        map.addControl(new maplibregl.NavigationControl());
+
+        editableWaypointMarkers = [];
+        editableWaypointsData.forEach(item => {
+            const el = createEditableWaypointMarkerElement(item);
+            const marker = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([item.lon, item.lat]).addTo(map);
+
+            marker.on('dragstart', () => {
+                el.classList.add('marker-dragging');
+            });
+
+            marker.on('drag', () => {
+                const coords = marker.getLngLat();
+                const draggedWaypoint = editableWaypointsData.find(w => w.id === item.id);
+                if (draggedWaypoint) {
+                    draggedWaypoint.lon = coords.lng;
+                    draggedWaypoint.lat = coords.lat;
+                }
+                updateEditablePathLine();
+            });
+
+            marker.on('dragend', () => onDragEnd(marker, item));
+
+            editableWaypointMarkers.push(marker);
+        });
+
+        map.on('load', () => {
+            const getCoords = (history) => history.map(p => [p.lon, p.lat]);
+            map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.vehicleHistory) } } });
+            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 3 } });
+            map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.topsideHistory) } } });
+            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 3, 'line-opacity': 0.5 } });
+            map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.secondaryHistory) } } });
+            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 3, 'line-opacity': 0.5 } });
+            map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+            map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: { 'line-color': '#ff190a', 'line-width': 3, 'line-dasharray': [2, 4] } });
+            map.addSource('published-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: mapState.publishedLineCoords } } });
+            map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
+
+            if (mapState.vehicleHistory.length > 0) updateVehicle(mapState.vehicleHistory[mapState.vehicleHistory.length - 1]);
+            if (mapState.topsideHistory.length > 0) updateTopside(mapState.topsideHistory[mapState.topsideHistory.length - 1]);
+            if (mapState.secondaryHistory.length > 0) updateSecondary(mapState.secondaryHistory[mapState.secondaryHistory.length - 1]);
+
+            updateEditablePathLine();
+
+            if (mapState.publishedPath.length > 0) {
+                updateAndDrawPublishedPath(mapState.publishedPath, false);
+            }
+        });
+        map.on('moveend', saveMapState);
+        map.on('zoomend', saveMapState);
+    }
+
+    // --- Data Update Functions ---
+    function updateVehicle(data) { if (!map) return; const el = vehicleMarker ? vehicleMarker.getElement() : createVehicleMarkerElement(); el.querySelector('.arrow-marker').style.transform = `rotate(${data.yaw}deg)`; el.querySelector('.vehicle-altitude-display').innerText = `Altitude: ${data.alt.toFixed(2)}m`; if (!vehicleMarker) { vehicleMarker = new maplibregl.Marker({ element: el }).setLngLat([data.lon, data.lat]).addTo(map); } else { vehicleMarker.setLngLat([data.lon, data.lat]); } }
+    function updateTopside(data) { if (!map) return; if (!topsideMarker) { topsideMarker = new maplibregl.Marker({ element: createGroundStationElement() }).setLngLat([data.lon, data.lat]).addTo(map); } else { topsideMarker.setLngLat([data.lon, data.lat]); } }
+    function updateSecondary(data) { if (!map) return; if (!secondaryMarker) { secondaryMarker = new maplibregl.Marker({ element: createSecondaryElement() }).setLngLat([data.lon, data.lat]).addTo(map); } else { secondaryMarker.setLngLat([data.lon, data.lat]); } }
+    function updateHistory(historyArray, data) { historyArray.push(data); if (historyArray.length > MAX_HISTORY_POINTS) historyArray.shift(); }
+
+    function updateEditablePathLine() {
+        if (!isMapInitialized || !map.isStyleLoaded()) return;
+
+        editableAltitudeMarkers.forEach(m => m.remove());
+        editableAltitudeMarkers = [];
+
+        let pathPoints = editableWaypointsData.map(w => ({ lat: parseFloat(w.lat), lon: parseFloat(w.lon), alt: parseFloat(w.alt) }));
+        if (pathPoints.length > 0 && mapState.vehicleHistory.length > 0) {
+            const lastVehiclePose = mapState.vehicleHistory[mapState.vehicleHistory.length - 1];
+            pathPoints.unshift({ lat: lastVehiclePose.lat, lon: lastVehiclePose.lon, alt: lastVehiclePose.alt });
+        }
+
+        const lineCoords = pathPoints.map(p => [p.lon, p.lat]);
+        map.getSource('editable-waypoints-route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
+
+        for (let i = 1; i < pathPoints.length; i++) {
+            const p1 = pathPoints[i - 1];
+            const p2 = pathPoints[i];
+            const midpoint = calculateMidpoint(
+                { latitude: p1.lat, longitude: p1.lon },
+                { latitude: p2.lat, longitude: p2.lon, altitude: p2.alt }
+            );
+            const marker = createAltitudeLabel(midpoint, '#fba5b0');
+            editableAltitudeMarkers.push(marker);
+        }
+    }
+
+    function updateAndDrawPublishedPath(data, captureNewStartPose = true) {
+        if (!isMapInitialized || !map.isStyleLoaded()) return;
+
+        mapState.publishedPath = data;
+
+        publishedWaypointMarkers.forEach(m => m.remove());
+        publishedWaypointMarkers = [];
+        publishedAltitudeMarkers.forEach(m => m.remove());
+        publishedAltitudeMarkers = [];
+
+        if (!data || data.length === 0) {
+            mapState.publishedLineCoords = [];
+            map.getSource('published-waypoints-route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+            return;
+        }
+
+        data.forEach((point, index) => {
+            const marker = new maplibregl.Marker({ element: createPublishedWaypointMarkerElement(point, index) }).setLngLat([point.lon, point.lat]).addTo(map);
+            publishedWaypointMarkers.push(marker);
+        });
+
+        let pathPoints = data.map(p => ({ lat: parseFloat(p.lat), lon: parseFloat(p.lon), alt: parseFloat(p.alt) }));
+        if (captureNewStartPose && mapState.vehicleHistory.length > 0) {
+            const lastVehiclePose = mapState.vehicleHistory[mapState.vehicleHistory.length - 1];
+            pathPoints.unshift({ lat: lastVehiclePose.lat, lon: lastVehiclePose.lon, alt: lastVehiclePose.alt });
+        } else if (!captureNewStartPose && mapState.publishedLineCoords.length > data.length) {
+            const startPose = mapState.publishedLineCoords[0];
+            pathPoints.unshift({ lat: startPose[1], lon: startPose[0], alt: data[0].alt });
+        }
+
+        mapState.publishedLineCoords = pathPoints.map(p => [p.lon, p.lat]);
+        map.getSource('published-waypoints-route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: mapState.publishedLineCoords } });
+
+        for (let i = 1; i < pathPoints.length; i++) {
+            const p1 = pathPoints[i - 1];
+            const p2 = pathPoints[i];
+            const midpoint = calculateMidpoint(
+                { latitude: p1.lat, longitude: p1.lon },
+                { latitude: p2.lat, longitude: p2.lon, altitude: p2.alt }
+            );
+            const marker = createAltitudeLabel(midpoint, '#fffca0');
+            publishedAltitudeMarkers.push(marker);
         }
     }
 
     function redrawAllTrails() {
-        if (!map.isStyleLoaded()) return;
-        map.getSource('vehicle-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: vehiclePoseHistory }});
-        map.getSource('topside-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsidePoseHistory }});
-        map.getSource('secondary-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryPoseHistory }});
+        if (!isMapInitialized || !map.isStyleLoaded()) return;
+        const getCoords = (history) => history.map(p => [p.lon, p.lat]);
+        map.getSource('vehicle-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.vehicleHistory) } });
+        map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.topsideHistory) } });
+        map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.secondaryHistory) } });
     }
 
-    map.on('load', () => {
-        // Add sources and layers for the trails
-        map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
-        map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 3 }});
+    // --- WebSocket Event Handlers ---
+    socket.on('vehicle_pose_update', (data) => {
+        if (!data.lon || !data.lat) return;
+        if (!isMapInitialized) {
+            mapState.center = [data.lon, data.lat];
+            initializeMap();
+        }
+        updateVehicle(data);
+        updateHistory(mapState.vehicleHistory, data);
+        redrawAllTrails();
+        updateEditablePathLine();
+        saveMapState();
+    });
+    socket.on('topside_pose_update', (data) => { if (!isMapInitialized || !data.lon || !data.lat) return; updateTopside(data); updateHistory(mapState.topsideHistory, data); redrawAllTrails(); });
+    socket.on('secondary_pose_update', (data) => { if (!isMapInitialized || !data.lon || !data.lat) return; updateSecondary(data); updateHistory(mapState.secondaryHistory, data); redrawAllTrails(); });
 
-        map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
-        map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 3, 'line-opacity': 0.5 }});
-
-        map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
-        map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 3, 'line-opacity': 0.5 }});
-
-        // Add layers for waypoint lines (which are static from the DB)
-        map.addSource('waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: waypointsData.map(w => [w.lon, w.lat]) }}});
-        map.addLayer({ id: 'waypoints-route-layer', type: 'line', source: 'waypoints-route', paint: { 'line-color': '#ff190a', 'line-width': 3, 'line-dasharray': [2, 4] }});
-        
-        // Initialize static waypoint markers
-        waypointsData.forEach(item => createWaypointMarker(item));
+    socket.on('published_path_update', (data) => {
+        if (!isMapInitialized) return;
+        const isSamePath = JSON.stringify(data) === JSON.stringify(mapState.publishedPath);
+        if (isSamePath) {
+            console.log("Received identical published path. Skipping redraw.");
+            return;
+        }
+        console.log("Received new published path. Redrawing line and markers.");
+        updateAndDrawPublishedPath(data, true);
+        saveMapState();
     });
 
-    function createWaypointMarker(item) {
-        const markerElement = document.createElement('div');
-        markerElement.className = 'wpt-custom-marker';
-        const diamond = document.createElement('div');
-        diamond.className = 'wpt-diamond';
-        const idDisplay = document.createElement('div');
-        idDisplay.className = 'wpt-id-display';
-        idDisplay.innerText = item.id;
-        markerElement.append(diamond, idDisplay);
-        markerElement.dataset.altitude = item.alt;
-
-        const marker = new maplibregl.Marker({ element: markerElement, draggable: true })
-            .setLngLat([item.lon, item.lat])
-            .addTo(map);
-        
-        marker.on('dragend', () => onDragEnd(marker, item));
-        waypointMarkers.push(marker);
-    }
-    
     function onDragEnd(marker, item) {
+        marker.getElement().classList.remove('marker-dragging');
+
         const coords = marker.getLngLat();
         fetch('/waypoint_drag', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: parseFloat(marker.getElement().dataset.altitude) })
         });
-        // You might want to redraw the waypoint line here
     }
 
+    // --- Page Load & Interaction Execution ---
+    document.addEventListener('DOMContentLoaded', () => {
+        loadMapState();
+        document.getElementById('map-switch-button').addEventListener('click', () => {
+            if (!isMapInitialized) return;
+            mapState.center = map.getCenter();
+            mapState.zoom = map.getZoom();
+            mapState.isOnline = !mapState.isOnline;
+            map.remove();
+            map = null; vehicleMarker = null; topsideMarker = null; secondaryMarker = null;
+            editableWaypointMarkers = []; publishedWaypointMarkers = [];
+            editableAltitudeMarkers = []; publishedAltitudeMarkers = [];
+            isMapInitialized = false;
+            initializeMap();
+            saveMapState();
+        });
+    });
+    window.addEventListener('beforeunload', saveMapState);
 </script>

@@ -1,6 +1,6 @@
 from flask import render_template, request, jsonify, redirect, url_for, send_from_directory
 from mvp_gui import app, db, sio_server, yaml_config
-from mvp_gui.models import Waypoint, CurrentWaypoints
+from mvp_gui.models import Waypoint
 import os
 
 @app.route('/map', methods=['GET', 'POST'])
@@ -11,9 +11,6 @@ def map_page():
         # Fetch only persistent data for initial render
         waypoints = Waypoint.query.order_by(Waypoint.id).all()
         waypoints_data = [{"id": waypoint.id, "lat": float(waypoint.lat), "lon": float(waypoint.lon), "alt": float(waypoint.alt)} for waypoint in waypoints]
-
-        cwaypoints = CurrentWaypoints.query.all()
-        current_waypoints_data = [{"id": cwaypoint.id, "lat": float(cwaypoint.lat), "lon": float(cwaypoint.lon), "alt": float(cwaypoint.alt)} for cwaypoint in cwaypoints]
 
     # This POST handler is for the legacy form-based buttons.
     # Modern interaction is handled via direct WebSocket events from the client.
@@ -31,7 +28,6 @@ def map_page():
 
     return render_template("map.html", 
                            items_jsn=waypoints_data, 
-                           citems_jsn=current_waypoints_data, 
                            # Pass empty or default data for real-time elements
                            vehicle_jsn={"lat": 0, "lon": 0, "yaw": 0, "alt": 0}, 
                            host_ip=host_ip, 

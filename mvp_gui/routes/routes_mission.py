@@ -5,6 +5,34 @@ from mvp_gui.forms import WaypointForm
 import xml.etree.ElementTree as ET
 import os
 
+def renumber_waypoints():
+    """
+    Renumbers all waypoints in the database to have sequential IDs, starting from 1.
+    This function is called after any operation that adds or removes waypoints
+    to ensure data integrity for other parts of the application that expect
+    sequential waypoint IDs.
+
+    NOTE: Modifying primary keys is generally an anti-pattern in database design.
+    This is a workaround for a specific application requirement.
+    """
+    with app.app_context():
+        # Step 1: Fetch all waypoints, ordered by their current ID, and store their data.
+        # This ensures that we maintain the existing order of waypoints.
+        waypoints_data = [(w.lat, w.lon, w.alt) for w in Waypoint.query.order_by(Waypoint.id).all()]
+
+        # Step 2: Delete all waypoints from the table.
+        # This is a bulk delete operation.
+        db.session.query(Waypoint).delete()
+
+        # Step 3: Re-insert all waypoints with new, sequential IDs.
+        for i, data in enumerate(waypoints_data):
+            # Create a new Waypoint object with an explicit ID.
+            new_waypoint = Waypoint(id=i + 1, lat=data[0], lon=data[1], alt=data[2])
+            db.session.add(new_waypoint)
+        
+        # Step 4: Commit the entire transaction to the database.
+        db.session.commit()
+
 def generate_waypoints_from_kml(file_path, replace_flag):
     tree = ET.parse(file_path)
     root = tree.getroot()
@@ -19,6 +47,8 @@ def generate_waypoints_from_kml(file_path, replace_flag):
         waypoint = Waypoint(lat=lat, lon=lon, alt=alt)
         db.session.add(waypoint)
     db.session.commit()
+    # After adding all waypoints, renumber them to ensure sequential IDs.
+    renumber_waypoints()
 
 @app.route("/mission", methods=['GET', 'POST'])
 def mission_page():
@@ -34,6 +64,8 @@ def mission_page():
             if entry:
                 db.session.delete(entry)
                 db.session.commit()
+                # After deleting, renumber all subsequent waypoints.
+                renumber_waypoints()
             return redirect(url_for('mission_page'))
 
         elif 'edit' in request.form:
@@ -47,6 +79,8 @@ def mission_page():
                 new_entry = Waypoint(lat=entry.lat, lon=entry.lon, alt=entry.alt)
                 db.session.add(new_entry)
                 db.session.commit()
+                # After copying (which adds a waypoint), renumber all.
+                renumber_waypoints()
             return redirect(url_for('mission_page'))
 
     return render_template("mission.html", waypoints=waypoints, current_page="mission")
@@ -82,7 +116,7 @@ def edit_waypoint_page():
         db.session.commit()
         return redirect(url_for('mission_page'))
     
-    return render_template('edit_waypoint.html', form=form, entry=entry)
+    return render_template('secondary_pages/edit_waypoint.html', form=form, entry=entry)
 
 @app.route('/mission/add_waypoint', methods=['GET', 'POST'])
 def add_waypoint_page():
@@ -92,8 +126,10 @@ def add_waypoint_page():
         form.populate_obj(new_waypoint)
         db.session.add(new_waypoint)
         db.session.commit()
+        # After adding the new waypoint, renumber all to ensure sequential IDs.
+        renumber_waypoints()
         return redirect(url_for('mission_page'))
-    return render_template('add_waypoints.html', form=form)
+    return render_template('secondary_pages/add_waypoints.html', form=form)
 
 # This endpoint is deprecated. Helm/Controller states are now pushed via WebSocket.
 @app.route('/mission/states')

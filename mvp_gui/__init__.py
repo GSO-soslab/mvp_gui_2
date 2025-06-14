@@ -31,7 +31,7 @@ env['PYTHONPATH'] = env.get('PYTHONPATH', '') + ':' + project_path
 
 # Initialize extensions
 db = SQLAlchemy(app)
-sio_server = SocketIO(app)
+sio_server = SocketIO(app, logger=False, engineio_logger=False)
 # ssh_connection has been removed
 
 # Import routes, models, and events after initializing extensions to avoid circular imports

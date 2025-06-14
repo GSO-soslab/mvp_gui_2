@@ -59,7 +59,8 @@
             const connectedStatesCell = document.getElementById('connectedStates');
             connectedStatesCell.innerHTML = ''; // Clear previous buttons
 
-            data.connected_states.forEach(state => {
+            // Corrected to use 'transitions' key which is sent from the ROS node
+            (data.transitions || []).forEach(state => {
                 const form = document.createElement('form');
                 form.classList.add('d-inline', 'mr-2');
                 form.dataset.state = state;

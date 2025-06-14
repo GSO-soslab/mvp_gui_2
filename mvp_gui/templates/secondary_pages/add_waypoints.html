@@ -1,31 +1,35 @@
 {% extends "base.html" %}
 {% block title%}
-Add Waypoints
+Add Waypoint
 {% endblock %}
 
-{% block content%}  
-
-<div class="add_waypoint">
-    <form method="POST" class = "form-register" style="color:white">
-        {{ form .hidden_tag() }}
+{% block content%}
+<div class="container mt-4">
+    <div class="col-md-6 offset-md-3">
         <h1 class="h3 mb-3 font-weight-normal">
-            Please Add a waypoint
+            Add a New Waypoint
         </h1>
-        <br>
-        <br>
-        {{ form.lat.label() }}
-        {{ form.lat(class="form-control", placeholder="Latitude") }}
-        <br>
-        {{ form.lon.label() }}
-        {{ form.lon(class="form-control", placeholder="Longitude") }}
-        <br>
-        {{ form.alt.label() }}
-        {{ form.alt(class="form-control", placeholder="altitude") }}   
-        <br>
-        <input type="submit" value="Submit"> 
-    </form>
-    <br>
+        <form method="POST" action="{{ url_for('add_waypoint_page') }}" class="form-register" style="color:white">
+            {{ form.hidden_tag() }}
+
+            <div class="form-group mb-3">
+                {{ form.lat.label(class="form-control-label") }}
+                {{ form.lat(class="form-control bg-dark text-white", placeholder="Latitude (e.g., 34.0522)") }}
+            </div>
+
+            <div class="form-group mb-3">
+                {{ form.lon.label(class="form-control-label") }}
+                {{ form.lon(class="form-control bg-dark text-white", placeholder="Longitude (e.g., -118.2437)") }}
+            </div>
+
+            <div class="form-group mb-3">
+                {{ form.alt.label(class="form-control-label") }}
+                {{ form.alt(class="form-control bg-dark text-white", placeholder="Altitude (e.g., 10.0)") }}
+            </div>
+
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('mission_page') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
 </div>
-
-
 {% endblock %}

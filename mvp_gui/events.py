@@ -47,6 +47,11 @@ def handle_launch_status_update(data):
     """Relay launch status from ROS node to all browser clients in the room."""
     sio_server.emit('launch_status_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
     
+@sio_server.on('published_path_update')
+def handle_published_path_update(data):
+    """Relay published path from ROS node to all browser clients in the room."""
+    sio_server.emit('published_path_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
 # --- Handlers for events FROM browsers ---
 
 @sio_server.on('ros_action')

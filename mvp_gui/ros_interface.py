@@ -8,13 +8,16 @@ import threading
 import numpy as np
 import yaml
 from nav_msgs.msg import Odometry
-from geographic_msgs.msg import GeoPoseStamped
+from geographic_msgs.msg import GeoPoseStamped, GeoPath
 from mvp_msgs.msg import Power, Waypoint, ControlProcess, HelmState
 from std_msgs.msg import Float64, Float32MultiArray, Int16, Bool, Int16MultiArray
 from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
 from std_srvs.srv import SetBool, Trigger
 import os
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 class RosInterfaceNode(Node):
     def __init__(self, sio_client):
@@ -61,6 +64,7 @@ class RosInterfaceNode(Node):
         self.create_subscription(Bool, self.topic_ns + self.yaml_config.get('controller_state_get', 'controller_state'), self.controller_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Power, self.topic_ns + self.yaml_config.get('gpio_power_get', 'gpio_power_state'), self.power_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('roslaunch_state_get', 'roslaunch_state'), self.roslaunch_state_callback, 10, callback_group=self.callback_group)
+        self.create_subscription(GeoPath, self.topic_ns + self.yaml_config.get('survey_geopath_source', 'survey/geopath'), self.survey_geopath_callback, 10, callback_group=self.callback_group)
 
         # --- Static Service Clients ---
         self.set_helm_state_client = self.create_client(SetString, self.service_ns + self.yaml_config.get('helm_state_set', 'mvp_helm/change_state'), callback_group=self.callback_group)
@@ -101,6 +105,15 @@ class RosInterfaceNode(Node):
             elif action == 'launch_file': self.call_launch_file(data.get('key'), data.get('status'))
 
     # --- Methods to emit status updates TO the server ---
+    def survey_geopath_callback(self, msg):
+        """Callback for the published geopath. Relays data to the browser."""
+        if not self.sio.connected: return
+        path_data = []
+        for pose_stamped in msg.poses:
+            pos = pose_stamped.pose.position
+            path_data.append({'lat': pos.latitude, 'lon': pos.longitude, 'alt': pos.altitude})
+        self.sio.emit('published_path_update', path_data)
+
     def roslaunch_state_callback(self, msg):
         if not self.sio.connected: return
         statuses = list(msg.data)
@@ -186,7 +199,7 @@ class RosInterfaceNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    sio = sio_client_lib.Client(logger=True, engineio_logger=True)
+    sio = sio_client_lib.Client(logger=False, engineio_logger=False)
     
     @sio.event
     def connect():
