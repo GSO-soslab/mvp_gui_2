@@ -1,0 +1,40 @@
+#----------------------------
+# Topics
+#----------------------------
+topic_ns: /alpha_rise/remote/id_2/
+## pose
+poses_source: odometry
+geo_pose_source: geopose
+topside_geo_pose_source: topside/geopose
+secondary_geo_pose_source: secondary/geopose
+## state
+helm_state_get: helm/state
+controller_state_get: controller_state
+gpio_power_get: gpio_power_state
+roslaunch_state_get: roslaunch_state
+
+#----------------------------
+# Services
+#----------------------------
+service_ns: /alpha_rise/remote/id_2/
+helm_state_set: mvp_helm/change_state
+controller_state_set: controller/set
+pub_waypoints_service: mvp_helm/set_waypoints
+set_power_service: gpio_manager/set_power/
+
+# Offline Map
+tiles_dir_1: ./offline_map/
+tiles_dir_2: ../offline_map/
+
+##ALPHA_RISE
+roslaunch_folder: ~/ros2_ws/src/alpha_rise_auv/alpha_rise_bringup/launch/
+ros_source_base: source /opt/ros/jazzy/setup.bash && source ~/ros2_ws/install/setup.bash && 
+c2_config_yaml: ~/ros2_ws/src/alpha_rise_auv/alpha_rise_bringup/config/mvp_c2.yaml
+
+##RACE
+# roslaunch_folder: ~/ros2_ws/src/race_auv/race_bringup/launch/
+# ros_source_base: source /opt/ros/jazzy/setup.bash && source ~/ros2_ws/install/setup.bash && 
+# #WAMV
+# roslaunch_folder: ~/ros2_ws/src/wamv_rise/wamv_rise_bringup/launch/
+# ros_source_base: source /opt/ros/jazzy/setup.bash && source ~/ros2_ws/install/setup.bash && 
+# ros_source_base: source ~/.bashrc &&

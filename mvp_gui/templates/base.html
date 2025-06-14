@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- Required meta tags -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <!-- Bootstrap CSS -->
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/maplibre-gl.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <script src="{{ url_for('static', filename='js/maplibre-gl.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/plotly-latest.min.js') }}"></script>
+        <!-- Add Socket.IO client library -->
+        <script src="https://cdn.socket.io/4.5.2/socket.io.min.js"></script>
+
+        <style>
+            body {  margin-left: 2%; margin-right:5%; padding: 0; }
+            html, body, #map { height: 90%; }
+            .nav-item.active .nav-link { color: white !important; }
+        </style>
+            
+        <title>
+            {% block title%}{% endblock %}
+        </title>
+        {% block head%}{% endblock %}
+    </head>
+    <body>
+        <!-- Navbar here -->
+        <nav class="navbar navbar-expand-md navbar-dark bg-dark">
+            <a class="navbar-brand" href="#">MVP GUI</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item {% if current_page == 'systems' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('systems_page') }}">Systems & Tools</a>
+                    </li>
+                    </li>
+                    <li class="nav-item {% if current_page == 'vehicle_status' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('vehicle_status_page') }}">Vehicle Status</a>
+                    </li>
+                    <li class="nav-item {% if current_page == 'power_manager' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('power_manager_page') }}">Power Manager</a>
+                    </li>
+                    <li class="nav-item {% if current_page == 'mission' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('mission_page') }}">Mission</a>
+                    </li>
+                    <li class="nav-item {% if current_page == 'map' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('map_page') }}">Map</a>
+                    </li>                  
+                </ul>
+            </div>
+        </nav>
+
+        {% block content %}{% endblock %}
+        
+        <!-- Optional JavaScript -->
+        <script src="{{ url_for('static', filename='js/fontawesome.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/jquery-3.5.1.slim.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/popper.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
+
+        <script>
+            // Establish a global Socket.IO connection
+            const socket = io();
+            socket.on('connect', () => {
+                console.log('Connected to server via WebSocket.');
+            });
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server.');
+            });
+        </script>
+
+        {% block script %}{% endblock %}
+        
+    </body>
+    <style>
+        body {
+            background-color: #212121;
+            color: white;
+        }
+    </style>
+</html>

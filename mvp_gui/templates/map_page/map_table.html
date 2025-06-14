@@ -1,0 +1,163 @@
+<div id="map" class="map"></div>
+
+<style>
+    /* All your existing CSS styles for markers remain the same */
+    .cWpt-custom-marker { display: flex; flex-direction: column; align-items: center; }
+    .cWpt-triangle { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 10px solid #f9f10c; }
+    .cWpt-id-display { margin-top: 10px; font-size: 15px; color: #fffca0; background: transparent; padding: 0px 0px; }
+    .cWpt-altitude-display { margin-top: 0px; font-size: 12px; color: #fffca0; background: transparent; padding: 0px 10px; }
+    .wpt-custom-marker { display: flex; flex-direction: column; align-items: center; }
+    .wpt-diamond { width: 23px; height: 23px; background-color: #ff190a; transform: rotate(45deg); position: relative; margin-bottom: 10px; padding: 10px 10px; }
+    .wpt-id-display { margin-top: 10px; font-size: 15px; color: #fba5b0; background: transparent; padding: 0px 10px; text-align: center; }
+    .wpt-altitude-display { margin-top: 35px; font-size: 13px; color: #fba5b0; background: transparent; padding: 0px 1px; text-align: center; }
+    .marker-container { display: flex; flex-direction: column; align-items: center; position: relative; }
+    .arrow-marker { width: 40px; height: 40px; background: url('{{ url_for('static', filename='icons/white_arrow.png') }}') no-repeat center center; background-size: contain; transform-origin: center; }
+    .groundstation-marker { width: 45px; height: 45px; background: url('{{ url_for('static', filename='icons/ground_station_icon.png') }}') no-repeat center center; background-size: contain; transform-origin: center; }
+    .secondary-marker { width: 20px; height: 20px; background-color: blue; border-radius: 50%; }
+    .vehicle-altitude-display { margin-top: -5px; font-size: 13px; color: #d1feb3; background: transparent; padding: 0px 0px; text-align: center; position: absolute; top: 100%; }
+    .altitude-marker { margin-top: -25px; display: inline-block; text-align: center; white-space: nowrap; color: #87ceff; font-size: 13px; background: transparent; padding: 0px 0px; }
+</style>
+
+<script>
+    const isDragging = false; // Dragging flag
+
+    // --- Client-Side Data Stores ---
+    const MAX_HISTORY_POINTS = 50; // Keep the last 50 points for the trail
+    let vehiclePoseHistory = [];
+    let topsidePoseHistory = [];
+    let secondaryPoseHistory = [];
+    
+    // Initial data from server (only for non-real-time elements)
+    const waypointsData = {{ items_jsn | safe }};
+    const currentWaypointsData = {{ citems_jsn | safe }};
+    const initialVehicleData = {{ vehicle_jsn | safe }};
+
+    // --- Map Initialization ---
+    const serverIp = "{{ host_ip }}";
+    const map = new maplibregl.Map({
+        container: 'map',
+        zoom: 19,
+        center: [initialVehicleData.lon, initialVehicleData.lat],
+        style: {
+            "version": 8,
+            "sources": { "local-tiles": { "type": "raster", "tiles": [`http://${serverIp}:5000/tiles/{z}/{x}/{y}.png`], "tileSize": 256 } },
+            "layers": [{ "id": "local-tiles-layer", "type": "raster", "source": "local-tiles" }]
+        }
+    });
+    map.addControl(new maplibregl.NavigationControl());
+    
+    // --- Marker Initialization ---
+    const vehicleMarker = new maplibregl.Marker({ element: createVehicleMarkerElement(), draggable: false }).setLngLat([0,0]).addTo(map);
+    const topsideMarker = new maplibregl.Marker({ element: createGroundStationElement(), draggable: false }).setLngLat([0,0]).addTo(map);
+    const secondaryMarker = new maplibregl.Marker({ element: createSecondaryElement(), draggable: false }).setLngLat([0,0]).addTo(map);
+    let waypointMarkers = [];
+
+    // --- Helper Functions to Create Marker HTML ---
+    function createVehicleMarkerElement() {
+        const container = document.createElement('div');
+        container.className = 'marker-container';
+        const arrow = document.createElement('div');
+        arrow.className = 'arrow-marker';
+        const altDisplay = document.createElement('div');
+        altDisplay.className = 'vehicle-altitude-display';
+        container.append(arrow, altDisplay);
+        return container;
+    }
+    function createGroundStationElement() {
+        const el = document.createElement('div');
+        el.className = 'groundstation-marker';
+        return el;
+    }
+    function createSecondaryElement() {
+        const el = document.createElement('div');
+        el.className = 'secondary-marker';
+        return el;
+    }
+
+    // --- WebSocket Event Handlers ---
+    socket.on('vehicle_pose_update', (data) => {
+        updateVehicle(data);
+        updateHistory(vehiclePoseHistory, data);
+        redrawAllTrails();
+    });
+    socket.on('topside_pose_update', (data) => {
+        topsideMarker.setLngLat([data.lon, data.lat]);
+        updateHistory(topsidePoseHistory, data);
+        redrawAllTrails();
+    });
+    socket.on('secondary_pose_update', (data) => {
+        secondaryMarker.setLngLat([data.lon, data.lat]);
+        updateHistory(secondaryPoseHistory, data);
+        redrawAllTrails();
+    });
+    
+    function updateVehicle(data) {
+        vehicleMarker.setLngLat([data.lon, data.lat]);
+        const markerElement = vehicleMarker.getElement();
+        markerElement.querySelector('.arrow-marker').style.transform = `rotate(${90 - data.yaw}deg)`;
+        markerElement.querySelector('.vehicle-altitude-display').innerText = `Altitude: ${data.alt.toFixed(2)}m`;
+    }
+
+    function updateHistory(historyArray, data) {
+        historyArray.push([data.lon, data.lat]);
+        if (historyArray.length > MAX_HISTORY_POINTS) {
+            historyArray.shift(); // Remove the oldest point
+        }
+    }
+
+    function redrawAllTrails() {
+        if (!map.isStyleLoaded()) return;
+        map.getSource('vehicle-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: vehiclePoseHistory }});
+        map.getSource('topside-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsidePoseHistory }});
+        map.getSource('secondary-trail').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryPoseHistory }});
+    }
+
+    map.on('load', () => {
+        // Add sources and layers for the trails
+        map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
+        map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 3 }});
+
+        map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
+        map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 3, 'line-opacity': 0.5 }});
+
+        map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }}});
+        map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 3, 'line-opacity': 0.5 }});
+
+        // Add layers for waypoint lines (which are static from the DB)
+        map.addSource('waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: waypointsData.map(w => [w.lon, w.lat]) }}});
+        map.addLayer({ id: 'waypoints-route-layer', type: 'line', source: 'waypoints-route', paint: { 'line-color': '#ff190a', 'line-width': 3, 'line-dasharray': [2, 4] }});
+        
+        // Initialize static waypoint markers
+        waypointsData.forEach(item => createWaypointMarker(item));
+    });
+
+    function createWaypointMarker(item) {
+        const markerElement = document.createElement('div');
+        markerElement.className = 'wpt-custom-marker';
+        const diamond = document.createElement('div');
+        diamond.className = 'wpt-diamond';
+        const idDisplay = document.createElement('div');
+        idDisplay.className = 'wpt-id-display';
+        idDisplay.innerText = item.id;
+        markerElement.append(diamond, idDisplay);
+        markerElement.dataset.altitude = item.alt;
+
+        const marker = new maplibregl.Marker({ element: markerElement, draggable: true })
+            .setLngLat([item.lon, item.lat])
+            .addTo(map);
+        
+        marker.on('dragend', () => onDragEnd(marker, item));
+        waypointMarkers.push(marker);
+    }
+    
+    function onDragEnd(marker, item) {
+        const coords = marker.getLngLat();
+        fetch('/waypoint_drag', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: parseFloat(marker.getElement().dataset.altitude) })
+        });
+        // You might want to redraw the waypoint line here
+    }
+
+</script>

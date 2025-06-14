@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title%}
+Add Waypoints
+{% endblock %}
+
+{% block content%}  
+
+<div class="add_waypoint">
+    <form method="POST" class = "form-register" style="color:white">
+        {{ form .hidden_tag() }}
+        <h1 class="h3 mb-3 font-weight-normal">
+            Please Add a waypoint
+        </h1>
+        <br>
+        <br>
+        {{ form.lat.label() }}
+        {{ form.lat(class="form-control", placeholder="Latitude") }}
+        <br>
+        {{ form.lon.label() }}
+        {{ form.lon(class="form-control", placeholder="Longitude") }}
+        <br>
+        {{ form.alt.label() }}
+        {{ form.alt(class="form-control", placeholder="altitude") }}   
+        <br>
+        <input type="submit" value="Submit"> 
+    </form>
+    <br>
+</div>
+
+
+{% endblock %}

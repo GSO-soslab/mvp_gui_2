@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title%}
+Edit Waypoint
+{% endblock %}
+
+{% block content%}
+
+<div class="edit_waypoint">
+    <form method="POST" class="form-register" style="color:white">
+        {{ form .hidden_tag() }}
+        <h1 class="h3 mb-3 font-weight-normal">
+            Edit Waypoint ID: {{ entry.id }}
+        </h1>
+        <br>
+        {{ form.lat.label() }}
+        {{ form.lat(class="form-control", placeholder="Latitude") }}
+        <br>
+        {{ form.lon.label() }}
+        {{ form.lon(class="form-control", placeholder="Longitude") }}
+        <br>
+        {{ form.alt.label() }}
+        {{ form.alt(class="form-control", placeholder="altitude") }}
+        <br>
+        <input type="submit" value="Submit">
+    </form>
+    <br>
+</div>
+
+{% endblock %}

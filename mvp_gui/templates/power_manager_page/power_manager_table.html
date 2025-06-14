@@ -1,0 +1,78 @@
+<div id="power_manager" class="power_manager">
+    <table class="table table-hover table-dark">
+        <thead>
+            <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Name</th>
+                <th scope="col">Status</th>
+                <th scope="col">Action</th>
+            </tr>
+        </thead>
+        <tbody id="power_items_body">
+            {% for item_name in power_items %}
+            <tr id="power-item-{{ loop.index0 }}">
+                <td>{{ loop.index0 }}</td>
+                <td>{{ item_name }}</td>
+                <td class="status-cell">Unknown</td>
+                <td>
+                    <button class="btn btn-primary" onclick="togglePower('{{ item_name }}', {{ loop.index0 }})">
+                        Switch
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Lumen control is left as an example of form-based emission, but could also be converted to JS -->
+    <table class="table table-hover table-dark">
+        <tr>
+            <td>Lumen Brightness</td>
+            <td>
+                <button class="btn btn-secondary" onclick="adjustLumen('decrease')">-</button>
+            </td>
+            <td id="lumen-brightness-display">N/A</td>
+            <td>
+                <button class="btn btn-secondary" onclick="adjustLumen('increase')">+</button>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<script>
+    // Listen for power state updates from the server
+    socket.on('power_update', function (data) {
+        const channels = data.channels || [];
+        channels.forEach((status, index) => {
+            const row = document.getElementById(`power-item-${index}`);
+            if (row) {
+                const statusCell = row.querySelector('.status-cell');
+                statusCell.textContent = status ? 'ON' : 'OFF';
+                statusCell.style.color = status ? 'lightgreen' : 'lightcoral';
+            }
+        });
+    });
+
+    function togglePower(itemName, index) {
+        const row = document.getElementById(`power-item-${index}`);
+        const currentStatusText = row.querySelector('.status-cell').textContent;
+        const newStatus = currentStatusText !== 'ON'; // Toggle the current state
+
+        console.log(`Sending set_power for ${itemName} to ${newStatus}`);
+        socket.emit('ros_action', {
+            action: 'set_power',
+            name: itemName,
+            status: newStatus
+        });
+    }
+
+    function adjustLumen(direction) {
+        console.log(`Sending adjust_lumen: ${direction}`);
+        // Here you would emit a websocket event for lumen control
+        socket.emit('ros_action', {
+            action: 'adjust_lumen',
+            value: direction
+        });
+        // The lumen brightness display would be updated by a corresponding socket.on event
+    }
+</script>

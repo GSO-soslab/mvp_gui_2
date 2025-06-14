@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title%}
+Power Manager
+{% endblock %}
+
+{% block content%}
+<h1>Power Manager</h1>
+<!-- The h2 title is removed as vitals are now displayed on the Vehicle Status page -->
+{% include "power_manager_page/power_manager_table.html" %}
+{% endblock %}

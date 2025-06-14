@@ -1,0 +1,113 @@
+<h4>Vehicle Power status</h4>
+<table class="table table-hover table-dark table-bordered">
+    <thead>
+        <tr>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">Voltage [V]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">Current [Amp]</th>
+        </tr>
+    </thead>
+    <tbody id="vital-data">
+        <tr>
+            <td id="voltage">N/A</td>
+            <td id="current">N/A</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Vehicle Geo Position</h4>
+<table class="table table-hover table-dark table-bordered">
+    <thead>
+        <tr>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">latitude [deg]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">longitude [deg]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">altitude [m]</th>
+        </tr>
+    </thead>
+    <tbody id="position-data">
+        <tr>
+            <td id="latitude">N/A</td>
+            <td id="longitude">N/A</td>
+            <td id="altitude">N/A</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Vehicle pose</h4>
+<table class="table table-hover table-dark table-bordered">
+    <thead>
+        <tr>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">frame_id</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">child_frame_id</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">x [m]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">y [m]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">z [m]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">roll [deg]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">pitch [deg]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">yaw [deg]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">u [m/s]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">v [m/s]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">w [m/s]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">p [deg/s]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">q [deg/s]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">r [deg/s]</th>
+        </tr>
+    </thead>
+    <tbody id="pose-data">
+        <tr>
+            <td id="frame_id">N/A</td>
+            <td id="child_frame_id">N/A</td>
+            <td id="x">N/A</td>
+            <td id="y">N/A</td>
+            <td id="z">N/A</td>
+            <td id="roll">N/A</td>
+            <td id="pitch">N/A</td>
+            <td id="yaw">N/A</td>
+            <td id="u">N/A</td>
+            <td id="v">N/A</td>
+            <td id="w">N/A</td>
+            <td id="p">N/A</td>
+            <td id="q">N/A</td>
+            <td id="r">N/A</td>
+        </tr>
+    </tbody>
+</table>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // This code runs only after the page is fully loaded
+
+        // Listen for 'power_update' event to update vitals
+        socket.on('power_update', function (data) {
+            console.log('Power update received:', data);
+            document.getElementById('voltage').textContent = data.voltage.toFixed(2);
+            document.getElementById('current').textContent = data.current.toFixed(2);
+        });
+
+        // Listen for 'vehicle_pose_update' event from the server
+        socket.on('vehicle_pose_update', function (data) {
+            console.log('Vehicle pose update received:', data);
+            // Populate position data
+            document.getElementById('latitude').textContent = data.lat.toFixed(8);
+            document.getElementById('longitude').textContent = data.lon.toFixed(8);
+            document.getElementById('altitude').textContent = data.alt.toFixed(2);
+
+            // Populate pose data
+            document.getElementById('frame_id').textContent = data.frame_id;
+            document.getElementById('child_frame_id').textContent = data.child_frame_id;
+            document.getElementById('x').textContent = data.x.toFixed(2);
+            document.getElementById('y').textContent = data.y.toFixed(2);
+            document.getElementById('z').textContent = data.z.toFixed(2);
+            document.getElementById('roll').textContent = data.roll.toFixed(2);
+            document.getElementById('pitch').textContent = data.pitch.toFixed(2);
+            document.getElementById('yaw').textContent = data.yaw.toFixed(2);
+
+            // Populate twist data
+            document.getElementById('u').textContent = data.u.toFixed(2);
+            document.getElementById('v').textContent = data.v.toFixed(2);
+            document.getElementById('w').textContent = data.w.toFixed(2);
+            document.getElementById('p').textContent = data.p.toFixed(2);
+            document.getElementById('q').textContent = data.q.toFixed(2);
+            document.getElementById('r').textContent = data.r.toFixed(2);
+        });
+    });
+</script>

@@ -1,0 +1,97 @@
+<table class="table table-hover table-dark">
+    <thead>
+        <tr>
+            <th scope="col">Controller state</th>
+            <th scope="col"></th>
+            <th scope="col"></th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td id="controllerState">Unknown</td>
+            <td>
+                <form id="disableForm">
+                    <button type="submit">Disable</button>
+                </form>
+            </td>
+            <td>
+                <form id="enableForm">
+                    <button type="submit">Enable</button>
+                </form>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<table class="table table-hover table-dark">
+    <thead>
+        <tr>
+            <th scope="col">Current state</th>
+            <th scope="col">Connected states</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td id="currentState">Unknown</td>
+            <td id="connectedStates"></td>
+        </tr>
+    </tbody>
+</table>
+
+<form id="publishForm">
+    <button type="submit"> Publish waypoints </button>
+</form>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // This code runs only after the page is fully loaded
+
+        // Listen for controller state updates
+        socket.on('controller_state_update', function (data) {
+            console.log('Controller state update received:', data);
+            document.getElementById('controllerState').textContent = data.state ? 'Enabled' : 'Disabled';
+        });
+
+        // Listen for helm state updates
+        socket.on('helm_state_update', function (data) {
+            console.log('Helm state update received:', data);
+            document.getElementById('currentState').textContent = data.current_state;
+            const connectedStatesCell = document.getElementById('connectedStates');
+            connectedStatesCell.innerHTML = ''; // Clear previous buttons
+
+            data.connected_states.forEach(state => {
+                const form = document.createElement('form');
+                form.classList.add('d-inline', 'mr-2');
+                form.dataset.state = state;
+
+                const button = document.createElement('button');
+                button.type = 'submit';
+                button.textContent = state;
+
+                form.appendChild(button);
+                connectedStatesCell.appendChild(form);
+
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    socket.emit('ros_action', { action: 'change_state', value: this.dataset.state });
+                });
+            });
+        });
+
+        // Handle form submissions with JavaScript
+        document.getElementById('disableForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            socket.emit('ros_action', { action: 'controller_state', value: false });
+        });
+
+        document.getElementById('enableForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            socket.emit('ros_action', { action: 'controller_state', value: true });
+        });
+
+        document.getElementById('publishForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            socket.emit('publish_waypoints_request');
+        });
+    });
+</script>
