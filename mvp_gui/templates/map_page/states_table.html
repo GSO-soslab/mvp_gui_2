@@ -1,3 +1,4 @@
+<!-- /mvp_gui/templates/map_page/states_table.html -->
 <table class="table table-hover table-dark">
     <thead>
         <tr>
@@ -93,6 +94,8 @@
         document.getElementById('publishForm').addEventListener('submit', function (event) {
             event.preventDefault();
             socket.emit('publish_waypoints_request');
+            // Dispatch a custom event for the map to listen to
+            document.dispatchEvent(new CustomEvent('clear-history-trails'));
         });
     });
 </script>

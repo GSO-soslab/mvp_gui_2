@@ -11,7 +11,7 @@ process_lock_gui = threading.Lock()
 TIMEOUT = 2
 ROS_PID_FILE = os.path.join(tempfile.gettempdir(), "ros_gui_pid.txt")
 
-def start_mvp_gui_node_process(env, venv_activate_path, python_executable_path):
+def start_mvp_gui_node_process(env, venv_activate_path, python_executable_path, ros_workspace_path):
     """Launch ROS 2 GUI process by executing a dedicated shell script in a new terminal."""
     global ros_process
     
@@ -26,20 +26,22 @@ def start_mvp_gui_node_process(env, venv_activate_path, python_executable_path):
                 print(f"ERROR: Launcher script not found at {launcher_script_path}")
                 return
 
-            if not venv_activate_path or not python_executable_path:
-                print("ERROR: Virtual environment or Python executable path is not set. Cannot start ROS node.")
+            if not python_executable_path:
+                print("ERROR: Python executable path is not set. Cannot start ROS node.")
                 return
 
-            # The command now calls the shell script with three arguments:
-            # 1. Path to 'activate' script
+            # The command now calls the shell script with four arguments:
+            # 1. Path to 'activate' script (can be an empty string)
             # 2. Path for the PID file
-            # 3. Absolute path to the venv's python3 executable
+            # 3. Absolute path to the python executable
+            # 4. Path to the ROS workspace (can be an empty string)
             ros_process = subprocess.Popen(
                 ['gnome-terminal', '--', 'bash', '-c', 
                  (f'"{launcher_script_path}" '
-                  f'"{venv_activate_path}" '
+                  f'"{venv_activate_path if venv_activate_path else ""}" '
                   f'"{ROS_PID_FILE}" '
-                  f'"{python_executable_path}"; '
+                  f'"{python_executable_path}" '
+                  f'"{ros_workspace_path if ros_workspace_path else ""}"; '
                   'exec bash')],
                 env=env
             )

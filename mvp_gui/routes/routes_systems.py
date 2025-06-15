@@ -5,44 +5,27 @@ import mvp_gui.ros_interface_manager as ros_interface_manager
 import time
 import yaml
 import os
+import sys
 
 # There is no longer a class to instantiate. We will call the module functions directly.
-
-def get_launch_files_from_config():
-    """Loads YAML configs and extracts the list of launch files."""
-    try:
-        config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'config.yaml')
-        with open(config_path, 'r') as file:
-            main_config = yaml.safe_load(file)
-
-        c2_config_path_str = main_config.get('c2_config_yaml')
-        c2_config_path = os.path.expanduser(c2_config_path_str)
-        with open(c2_config_path, 'r') as file:
-            c2_config = yaml.safe_load(file)
-
-        c2_params = c2_config.get('/alpha_rise/mvp_c2_commander', {}).get('ros__parameters', {})
-        launch_packages = c2_params.get('launch_packages', [])
-        launch_files_list = c2_params.get('launch_files', [])
-        
-        launch_keys = [f"{pkg}/{file}" for pkg, file in zip(launch_packages, launch_files_list)]
-        return launch_keys
-    except Exception as e:
-        print(f"Error loading launch files from YAML: {e}")
-        return []
 
 @app.route('/', methods=['GET', 'POST'])
 def systems_page():
     if request.method == 'POST':
         if 'mvpgui_start' in request.form:
-            # Get the dynamically detected venv path from the app config
+            # Get the dynamically detected paths from the app config
             venv_path = current_app.config.get('VENV_ACTIVATE_PATH')
-            python_exec_path = None
+            ros_workspace_path = current_app.config.get('ROS_WORKSPACE_PATH')
+            
             if venv_path:
                 # Construct the full path to the Python executable within the venv
                 python_exec_path = os.path.join(os.path.dirname(venv_path), 'python3')
+            else:
+                # If no venv, use the same python that is running the Flask app
+                python_exec_path = sys.executable
 
-            # Pass both paths to the start function
-            ros_interface_manager.start_mvp_gui_node_process(env, venv_path, python_exec_path)
+            # Pass all paths to the start function
+            ros_interface_manager.start_mvp_gui_node_process(env, venv_path, python_exec_path, ros_workspace_path)
             time.sleep(2)
         elif 'mvpgui_stop' in request.form:
             # Call the new stop function from the manager module
@@ -51,7 +34,8 @@ def systems_page():
 
     # Call the new status function from the manager module
     mvpgui_status = ros_interface_manager.is_running()
-    launch_files = get_launch_files_from_config()
+    # Get launch files from the app config cache, populated by the ROS node
+    launch_files = current_app.config.get('_launch_keys_cache', [])
 
     return render_template(
         "systems.html", 

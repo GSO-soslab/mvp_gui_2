@@ -17,32 +17,38 @@ else
     echo "WARNING: /opt/ros/jazzy/setup.bash not found."
 fi
 
-# Check if the workspace setup file exists before sourcing
-if [ -f "$HOME/ros2_ws/install/setup.bash" ]; then
-    source "$HOME/ros2_ws/install/setup.bash"
+# Argument 4: Path to the ROS workspace (can be empty)
+ROS_WORKSPACE_PATH=$4
+echo "ROS Workspace path provided: '$ROS_WORKSPACE_PATH'"
+if [ -n "$ROS_WORKSPACE_PATH" ] && [ -f "$ROS_WORKSPACE_PATH/install/setup.bash" ]; then
+    echo "Sourcing workspace setup from: $ROS_WORKSPACE_PATH/install/setup.bash"
+    source "$ROS_WORKSPACE_PATH/install/setup.bash"
 else
-    echo "WARNING: ~/ros2_ws/install/setup.bash not found."
+    echo "WARNING: ROS workspace setup file not found at provided path or path not provided. Proceeding without workspace sourcing."
 fi
 
-# Argument 1: Path to the venv activate script (still useful for other env vars)
+# Argument 1: Path to the venv activate script (can be empty)
 VENV_ACTIVATE_PATH=$1
-echo "Sourcing virtual environment config from: $VENV_ACTIVATE_PATH"
-if [ -f "$VENV_ACTIVATE_PATH" ]; then
-    source "$VENV_ACTIVATE_PATH"
+if [ -n "$VENV_ACTIVATE_PATH" ]; then
+    echo "Sourcing virtual environment config from: $VENV_ACTIVATE_PATH"
+    if [ -f "$VENV_ACTIVATE_PATH" ]; then
+        source "$VENV_ACTIVATE_PATH"
+    else
+        echo "WARNING: Virtual environment activation script not found at '$VENV_ACTIVATE_PATH'. Skipping."
+    fi
 else
-    echo "ERROR: Virtual environment activation script not found. Aborting."
-    exit 1
+    echo "INFO: No virtual environment provided. Skipping venv activation."
 fi
 
 # Argument 2: Path for the PID file
 ROS_PID_FILE=$2
 echo "PID file will be created at: $ROS_PID_FILE"
 
-# Argument 3: The absolute path to the Python executable in the venv
+# Argument 3: The absolute path to the Python executable
 PYTHON_EXEC=$3
 echo "Using Python executable: $PYTHON_EXEC"
 if [ ! -x "$PYTHON_EXEC" ]; then
-    echo "ERROR: Python executable not found or not executable at $PYTHON_EXEC. Aborting."
+    echo "ERROR: Python executable not found or not executable at '$PYTHON_EXEC'. Aborting."
     exit 1
 fi
 

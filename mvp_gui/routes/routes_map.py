@@ -2,15 +2,21 @@ from flask import render_template, request, jsonify, redirect, url_for, send_fro
 from mvp_gui import app, db, sio_server, yaml_config
 from mvp_gui.models import Waypoint
 import os
+from werkzeug.exceptions import NotFound
+
 
 @app.route('/map', methods=['GET', 'POST'])
 def map_page():
-    host_ip = app.config['HOST_IP']
+    # Get host IP from the request to ensure it's correct for the client.
+    # This is crucial for the offline map tile URL.
+    host_ip = request.host.split(':')[0]
     
     with app.app_context():
         # Fetch only persistent data for initial render
         waypoints = Waypoint.query.order_by(Waypoint.id).all()
-        waypoints_data = [{"id": waypoint.id, "lat": float(waypoint.lat), "lon": float(waypoint.lon), "alt": float(waypoint.alt)} for waypoint in waypoints]
+        # CORRECTED: Since lat/lon are stored as Float, no conversion is needed.
+        # waypoint.alt is still a Decimal from Numeric, so it needs to be converted to float.
+        waypoints_data = [{"id": waypoint.id, "lat": waypoint.lat, "lon": waypoint.lon, "alt": float(waypoint.alt)} for waypoint in waypoints]
 
     # This POST handler is for the legacy form-based buttons.
     # Modern interaction is handled via direct WebSocket events from the client.
@@ -53,15 +59,57 @@ def waypoint_drag():
         db.session.commit()
     return jsonify({"success": True})
 
-@app.route('/tiles/<path:filename>')
-def serve_tiles(filename):
-    TILES_DIR_1 = yaml_config.get('tiles_dir_1', 'path/to/tiles1')
-    TILES_DIR_2 = yaml_config.get('tiles_dir_2', 'path/to/tiles2')
-    if os.path.exists(TILES_DIR_1):
-        for tile_dir in sorted(os.listdir(TILES_DIR_1)):
-            loc_dir_1 = os.path.join(TILES_DIR_1, tile_dir)
-            loc_dir_2 = os.path.join(TILES_DIR_2, tile_dir)
-            full_path = os.path.join(loc_dir_1, filename)
-            if os.path.exists(full_path):
-                return send_from_directory(loc_dir_2, filename)    
-    return 'No Tile Available'
+# This route replaces the old '/tiles/<path:filename>' to serve map tiles
+# correctly and securely. It expects a URL like /tiles/z/x/y.png
+@app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
+def serve_tiles(z, x, y):
+    """
+    Serves map tiles from the offline storage directory specified in config.yaml.
+    This function expects a tile structure like: {tiles_dir}/{tile_set_name}/{z}/{x}/{y}.png
+    """
+    # Use the path from config. The original had two confusing paths, we simplify to one.
+    tiles_dir_config = yaml_config.get('tiles_dir_1')
+    if not tiles_dir_config:
+        app.logger.error("'tiles_dir_1' is not defined in config.yaml")
+        raise NotFound()
+
+    # Make path absolute to avoid ambiguity. Assume config path is relative to project root.
+    # app.root_path is the 'mvp_gui' folder.
+    project_root = os.path.abspath(os.path.join(app.root_path, '..'))
+    tiles_base_dir = os.path.join(project_root, tiles_dir_config)
+
+    if not os.path.isdir(tiles_base_dir):
+        app.logger.error(f"Offline map base directory not found at: {tiles_base_dir}")
+        raise NotFound()
+
+    # The original code iterated through subdirectories, assuming multiple tile sets
+    # (e.g., 'satellite', 'streets'). We maintain that logic.
+    for tile_set_name in sorted(os.listdir(tiles_base_dir)):
+        tile_set_root = os.path.join(tiles_base_dir, tile_set_name)
+        if not os.path.isdir(tile_set_root):
+            continue
+            
+        # The directory containing the final image file (e.g., .../15/8404/)
+        tile_directory = os.path.join(tile_set_root, str(z), str(x))
+
+        # The filename to be served (e.g., '5443.png')
+        tile_filename = f"{y}.png"
+
+        # Check if the specific tile file exists before serving
+        if os.path.exists(os.path.join(tile_directory, tile_filename)):
+            # send_from_directory is safe and handles headers correctly.
+            return send_from_directory(tile_directory, tile_filename)
+
+    # If the tile wasn't found in any tile set, return a 404.
+    # This is standard behavior for tile servers and map libraries handle it gracefully.
+    raise NotFound()
+
+
+@app.route('/map_page_assets/<path:filename>')
+def serve_map_page_assets(filename):
+    """
+    Serves CSS and JS files specifically for the map page from the templates/map_page directory.
+    This is a non-standard approach to fulfill the user request.
+    """
+    assets_dir = os.path.join(app.root_path, 'templates', 'map_page')
+    return send_from_directory(assets_dir, filename)

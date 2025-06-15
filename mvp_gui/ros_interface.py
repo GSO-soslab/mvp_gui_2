@@ -14,6 +14,7 @@ from std_msgs.msg import Float64, Float32MultiArray, Int16, Bool, Int16MultiArra
 from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
 from std_srvs.srv import SetBool, Trigger
+from rcl_interfaces.srv import GetParameters
 import os
 import logging
 
@@ -23,22 +24,15 @@ class RosInterfaceNode(Node):
     def __init__(self, sio_client):
         super().__init__('mvp_gui_interface_node')
         self.sio = sio_client
+        self.dynamic_clients_configured = False # Flag to ensure we configure only once
 
         # --- Load Main Configuration ---
         config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml')
         with open(config_path, 'r') as file:
             self.yaml_config = yaml.safe_load(file)
-        # --- Load Secondary C2 Configuration for specific device/launch names ---
-        self.c2_config = {}
-        c2_config_path_str = self.yaml_config.get('c2_config_yaml')
-        if c2_config_path_str:
-            c2_config_path = os.path.expanduser(c2_config_path_str)
-            try:
-                with open(c2_config_path, 'r') as file:
-                    self.c2_config = yaml.safe_load(file)
-                self.get_logger().info(f"Successfully loaded C2 config from: {c2_config_path}")
-            except FileNotFoundError:
-                self.get_logger().error(f"C2 config file not found at: {c2_config_path}")
+        
+        # --- C2 Configuration will be fetched from ROS parameters ---
+        self.c2_commander_node_name = self.yaml_config.get('c2_commander_node')
         
         self.get_logger().info('ROS Interface Node started. Setting up communications...')
         self.power_clients = {}
@@ -51,7 +45,19 @@ class RosInterfaceNode(Node):
         self.last_odom = None
         self.last_geo_pose = None
 
+        # --- Asynchronously fetch parameters from C2 Commander node ---
+        if self.c2_commander_node_name:
+            self.get_logger().info(f"Will attempt to fetch parameters from '{self.c2_commander_node_name}'.")
+            # This timer will try to fetch params, and reschedule itself on failure.
+            self.param_fetch_timer = self.create_timer(1.0, self.try_fetch_and_setup_dynamic_clients)
+        else:
+            self.get_logger().error("'c2_commander_node' not specified in config.yaml. Cannot setup dynamic clients.")
+
     def setup_ros_communications(self):
+        """
+        This function now only sets up STATIC subscribers and clients.
+        Dynamic clients (power, launch) are set up after fetching params.
+        """
         self.callback_group = ReentrantCallbackGroup()
         
         self.topic_ns = self.yaml_config.get('topic_ns', '/default_ns/')
@@ -71,26 +77,75 @@ class RosInterfaceNode(Node):
         self.set_controller_state_client = self.create_client(SetBool, self.service_ns + self.yaml_config.get('controller_state_set', 'controller/set'), callback_group=self.callback_group)
         self.pub_waypoints_client = self.create_client(SendWaypoints, self.service_ns + self.yaml_config.get('pub_waypoints_service', 'mvp_helm/set_waypoints'), callback_group=self.callback_group)
         
-        # --- Dynamically Create Service Clients from C2 Config ---
+    def try_fetch_and_setup_dynamic_clients(self):
+        # Cancel the timer so it doesn't fire again while we're processing.
+        if self.param_fetch_timer:
+            self.param_fetch_timer.cancel()
+            self.param_fetch_timer = None
+        
+        if self.dynamic_clients_configured:
+            return
+
+        self.get_logger().info(f"Attempting to fetch parameters from '{self.c2_commander_node_name}'...")
+        
+        param_client = self.create_client(GetParameters, f'{self.c2_commander_node_name}/get_parameters', callback_group=self.callback_group)
+        if not param_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn(f"Parameter service for '{self.c2_commander_node_name}' not available. Retrying in 5 seconds...")
+            self.param_fetch_timer = self.create_timer(5.0, self.try_fetch_and_setup_dynamic_clients)
+            return
+
+        req = GetParameters.Request()
+        req.names = ['gpio_devices', 'launch_packages', 'launch_files']
+        future = param_client.call_async(req)
+        future.add_done_callback(self.process_param_fetch_result)
+
+    def process_param_fetch_result(self, future):
         try:
-            c2_params = self.c2_config.get('/alpha_rise/mvp_c2_commander', {}).get('ros__parameters', {})
+            result = future.result()
             
-            gpio_devices = c2_params.get('gpio_devices', [])
+            # These are the names we requested.
+            requested_names = ['gpio_devices', 'launch_packages', 'launch_files']
+            
+            # CORRECTED: Manually pair the requested names with the returned values.
+            params = {name: value for name, value in zip(requested_names, result.values)}
+            
+            # Now we can check if we got valid values for all requested params.
+            if not all(p in params and params[p].type != 0 for p in requested_names):
+                self.get_logger().error(f"Could not retrieve all required parameters from '{self.c2_commander_node_name}'. Retrying...")
+                raise ValueError("Missing required parameters")
+
+            gpio_devices = params['gpio_devices'].string_array_value
+            launch_packages = params['launch_packages'].string_array_value
+            launch_files = params['launch_files'].string_array_value
+            
+            self.get_logger().info(f"Successfully fetched parameters: gpio_devices={list(gpio_devices)}, launch_packages={list(launch_packages)}, launch_files={list(launch_files)}")
+            
+            # --- Dynamically Create Power Service Clients ---
             base_power_srv = self.service_ns + self.yaml_config.get('set_power_service', 'gpio_manager/set_power/')
             for device_name in gpio_devices:
-                full_service_name = f"{base_power_srv}{device_name}"
-                self.power_clients[device_name] = self.create_client(SetBool, full_service_name, callback_group=self.callback_group)
+                if device_name not in self.power_clients:
+                    full_service_name = f"{base_power_srv}{device_name}"
+                    self.power_clients[device_name] = self.create_client(SetBool, full_service_name, callback_group=self.callback_group)
 
-            launch_packages = c2_params.get('launch_packages', [])
-            launch_files = c2_params.get('launch_files', [])
+            # --- Dynamically Create Launch Service Clients ---
+            self.launch_keys = [] # Clear and rebuild
             for package, filename in zip(launch_packages, launch_files):
                 launch_key = f"{package}/{filename}"
                 self.launch_keys.append(launch_key)
-                full_service_name = f"{self.service_ns}roslaunch/{launch_key}"
-                self.launch_clients[launch_key] = self.create_client(SetBool, full_service_name, callback_group=self.callback_group)
+                if launch_key not in self.launch_clients:
+                    full_service_name = f"{self.service_ns}roslaunch/{launch_key}"
+                    self.launch_clients[launch_key] = self.create_client(SetBool, full_service_name, callback_group=self.callback_group)
+            
             self.get_logger().info(f"Dynamically created {len(self.power_clients)} power clients and {len(self.launch_clients)} launch clients.")
+            self.dynamic_clients_configured = True
+            
+            # Send the list of launch keys to the Flask server to cache.
+            if self.sio.connected:
+                self.sio.emit('update_launch_keys', {'keys': self.launch_keys})
+
         except Exception as e:
-            self.get_logger().error(f"Failed to parse C2 config for dynamic services: {e}")
+            self.get_logger().error(f"Failed to process parameter fetch result: {e}. Retrying in 5 seconds...")
+            self.param_fetch_timer = self.create_timer(5.0, self.try_fetch_and_setup_dynamic_clients)
 
     def setup_sio_handlers(self):
         # This handler listens for commands relayed from the browser
@@ -193,7 +248,9 @@ class RosInterfaceNode(Node):
         req = SendWaypoints.Request(type='geopath')
         for wp_data in waypoints_data:
             wpt = Waypoint()
-            wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude = float(wp_data['lat']), float(wp_data['lon']), float(wp_data['alt'])
+            # CORRECTED: The data is already in float format from the web server.
+            # No need for an extra `float()` conversion.
+            wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude = wp_data['lat'], wp_data['lon'], wp_data['alt']
             req.wpt.append(wpt)
         self.pub_waypoints_client.call_async(req)
 
@@ -214,7 +271,7 @@ def main(args=None):
         print("ROS Interface disconnected from WebSocket server.")
 
     # --- Connection Retry Loop ---
-    server_url = 'http://localhost:5000'
+    server_url = 'http://localhost:5001'
     connected = False
     while not connected:
         try:

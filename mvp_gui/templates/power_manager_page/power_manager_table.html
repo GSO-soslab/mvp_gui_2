@@ -9,18 +9,10 @@
             </tr>
         </thead>
         <tbody id="power_items_body">
-            {% for item_name in power_items %}
-            <tr id="power-item-{{ loop.index0 }}">
-                <td>{{ loop.index0 }}</td>
-                <td>{{ item_name }}</td>
-                <td class="status-cell">Unknown</td>
-                <td>
-                    <button class="btn btn-primary" onclick="togglePower('{{ item_name }}', {{ loop.index0 }})">
-                        Switch
-                    </button>
-                </td>
+            <!-- Rows are dynamically inserted here by JavaScript -->
+            <tr>
+                <td colspan="4">Waiting for power data from ROS...</td>
             </tr>
-            {% endfor %}
         </tbody>
     </table>
 
@@ -40,10 +32,61 @@
 </div>
 
 <script>
+    // This variable will store the names of the channels to detect changes and prevent re-rendering.
+    let currentPowerChannelNames = [];
+
     // Listen for power state updates from the server
     socket.on('power_update', function (data) {
-        const channels = data.channels || [];
-        channels.forEach((status, index) => {
+        const channelNames = data.channel_names || [];
+        const channelStatuses = data.channels || [];
+
+        // Check if the list of channels has changed to avoid unnecessary re-rendering.
+        if (JSON.stringify(currentPowerChannelNames) !== JSON.stringify(channelNames)) {
+            console.log('Power channels have changed. Rebuilding table.');
+            currentPowerChannelNames = channelNames;
+            const tbody = document.getElementById('power_items_body');
+            tbody.innerHTML = ''; // Clear existing rows
+
+            if (channelNames.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4">No power channels available. Waiting for data...</td></tr>';
+            } else {
+                channelNames.forEach((name, index) => {
+                    const row = document.createElement('tr');
+                    row.id = `power-item-${index}`; // Use index for unique ID
+
+                    // ID cell
+                    const idCell = document.createElement('td');
+                    idCell.textContent = index;
+                    row.appendChild(idCell);
+
+                    // Name cell
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = name;
+                    row.appendChild(nameCell);
+
+                    // Status cell
+                    const statusCell = document.createElement('td');
+                    statusCell.className = 'status-cell';
+                    statusCell.textContent = 'Unknown';
+                    row.appendChild(statusCell);
+
+                    // Action cell
+                    const actionCell = document.createElement('td');
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Switch';
+                    // The onclick function now takes the item name and index
+                    button.onclick = () => togglePower(name, index);
+                    actionCell.appendChild(button);
+                    row.appendChild(actionCell);
+
+                    tbody.appendChild(row);
+                });
+            }
+        }
+
+        // After ensuring the table is built, update the statuses
+        channelStatuses.forEach((status, index) => {
             const row = document.getElementById(`power-item-${index}`);
             if (row) {
                 const statusCell = row.querySelector('.status-cell');
@@ -56,7 +99,8 @@
     function togglePower(itemName, index) {
         const row = document.getElementById(`power-item-${index}`);
         const currentStatusText = row.querySelector('.status-cell').textContent;
-        const newStatus = currentStatusText !== 'ON'; // Toggle the current state
+        // Toggle the state. If it's not ON, turn it ON.
+        const newStatus = (currentStatusText !== 'ON');
 
         console.log(`Sending set_power for ${itemName} to ${newStatus}`);
         socket.emit('ros_action', {
@@ -68,11 +112,10 @@
 
     function adjustLumen(direction) {
         console.log(`Sending adjust_lumen: ${direction}`);
-        // Here you would emit a websocket event for lumen control
         socket.emit('ros_action', {
             action: 'adjust_lumen',
             value: direction
         });
-        // The lumen brightness display would be updated by a corresponding socket.on event
+        // Note: The lumen brightness display would be updated by a corresponding socket.on event.
     }
 </script>

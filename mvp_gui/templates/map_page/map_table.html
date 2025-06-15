@@ -1,5 +1,5 @@
 <!-- Add a button to switch map sources -->
-<button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online Map</button>
+<button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online/Offline Map</button>
 
 <div id="map" class="map"></div>
 
@@ -9,15 +9,6 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-    }
-
-    .published-wpt-triangle {
-        width: 0;
-        height: 0;
-        border-left: 8px solid transparent;
-        border-right: 8px solid transparent;
-        border-top: 14px solid #ffd500;
-        /* Yellow */
     }
 
     .published-wpt-id {
@@ -32,8 +23,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        /* Set a default stacking order */
-        z-index: 10;
+        z-index: 0;
     }
 
     .editable-wpt-diamond {
@@ -43,7 +33,6 @@
         /* Red */
         transform: rotate(45deg);
         transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
-        /* Smooth transition */
     }
 
     .editable-wpt-id {
@@ -57,15 +46,12 @@
 
     /* --- Style for when a waypoint is being dragged --- */
     .editable-wpt-marker.marker-dragging {
-        /* Bring the dragged marker to the front */
-        z-index: 20;
+        z-index: 0;
     }
 
     .editable-wpt-marker.marker-dragging .editable-wpt-diamond {
-        transform: rotate(45deg) scale(1.3);
-        /* Make it bigger */
+        transform: rotate(45deg);
         box-shadow: 0 0 10px 3px rgba(255, 25, 10, 0.7);
-        /* Add a red glow */
     }
 
     /* --- Style for Altitude Labels on Lines --- */
@@ -75,9 +61,19 @@
         text-align: center;
         background: transparent;
         text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
-        /* Set z-index to ensure labels are above lines but below markers */
         z-index: 5;
     }
+
+    .altitude-label-marker.published {
+        color: #fffca0;
+        /* Yellow for published path */
+    }
+
+    .altitude-label-marker.editable {
+        color: #fba5b0;
+        /* Red for editable path */
+    }
+
 
     /* --- Common & Vehicle Marker Styles --- */
     .marker-container {
@@ -113,36 +109,22 @@
         background-color: blue;
         border-radius: 50%;
     }
-
-    .vehicle-altitude-display {
-        margin-top: -5px;
-        font-size: 13px;
-        color: #d1feb3;
-        background: transparent;
-        position: absolute;
-        top: 100%;
-        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
-    }
 </style>
 
 <script>
     // --- Global State & Configuration ---
-    let map;
-    let isMapInitialized = false;
+    let map; // The map object
+    let isMapInitialized = false; // Becomes true ONLY when the map 'load' event has fired
+    let isOnlineMap = true;
     const MAX_HISTORY_POINTS = 50;
+    const MAP_STATE_KEY = 'mvpMapState';
 
     // --- Client-Side Data Stores ---
-    let mapState = {
-        isOnline: false,
-        zoom: 19,
-        center: [{{ vehicle_jsn.lon | default(0) }}, {{ vehicle_jsn.lat | default (0) }}],
-    vehicleHistory: [],
-        topsideHistory: [],
-            secondaryHistory: [],
-                publishedPath: [],
-                    publishedLineCoords: [] // Stores the final, static line coordinates
-    };
-
+    let vehicleHistory = [];
+    let topsideHistory = [];
+    let secondaryHistory = [];
+    let currentVehiclePose = null; // Holds the most recent pose data for runtime use
+    let lastPublishedPath = []; // Holds the most recent path data for runtime use
     const editableWaypointsData = {{ items_jsn | safe }};
     const serverIp = "{{ host_ip }}";
 
@@ -153,46 +135,91 @@
     let editableAltitudeMarkers = [];
     let publishedAltitudeMarkers = [];
 
+    // --- State Persistence Functions ---
+    function saveMapState() {
+        // We only save the view settings and history trails, not live data.
+        const stateToSave = {
+            isOnline: isOnlineMap,
+            vehicleHistory: vehicleHistory,
+            topsideHistory: topsideHistory,
+            secondaryHistory: secondaryHistory,
+        };
+
+        if (map && isMapInitialized) {
+            stateToSave.zoom = map.getZoom();
+            stateToSave.center = map.getCenter();
+        }
+
+        sessionStorage.setItem(MAP_STATE_KEY, JSON.stringify(stateToSave));
+    }
+
+    function loadMapState() {
+        const savedStateJSON = sessionStorage.getItem(MAP_STATE_KEY);
+        if (savedStateJSON) {
+            try {
+                const savedState = JSON.parse(savedStateJSON);
+                isOnlineMap = savedState.isOnline ?? true;
+                // Restore history trails
+                vehicleHistory = savedState.vehicleHistory || [];
+                topsideHistory = savedState.topsideHistory || [];
+                secondaryHistory = savedState.secondaryHistory || [];
+
+                // Return camera position if it exists
+                if (savedState.center) {
+                    return [
+                        [savedState.center.lng, savedState.center.lat], savedState.zoom
+                    ];
+                }
+            } catch (e) {
+                console.error("Error parsing map state from sessionStorage:", e);
+                sessionStorage.removeItem(MAP_STATE_KEY);
+            }
+        }
+        return null;
+    }
+
     // --- Helper Functions ---
     function calculateMidpoint(p1, p2) {
         return {
-            latitude: (p1.latitude + p2.latitude) / 2,
-            longitude: (p1.longitude + p2.longitude) / 2,
-            altitude: p2.altitude // Altitude of the destination point
+            latitude: (p1.lat + p2.lat) / 2,
+            longitude: (p1.lon + p2.lon) / 2,
+            altitude: p2.alt
         };
     }
 
-    function createAltitudeLabel(midpoint, color) {
+    function createAltitudeLabel(midpoint, type, color) {
         const el = document.createElement('div');
-        el.className = 'altitude-label-marker';
+        el.className = `altitude-label-marker ${type}`; // e.g., 'editable' or 'published'
         el.style.color = color;
         el.innerText = `${midpoint.altitude.toFixed(1)}m`;
-
-        return new maplibregl.Marker({ element: el, anchor: 'center' })
-            .setLngLat([midpoint.longitude, midpoint.latitude])
-            .addTo(map);
+        return new maplibregl.Marker({
+            element: el,
+            anchor: 'center'
+        }).setLngLat([midpoint.longitude, midpoint.latitude]).addTo(map);
     }
 
+    // --- Marker Creation Helpers ---
     function createVehicleMarkerElement() {
         const container = document.createElement('div');
         container.className = 'marker-container';
         const arrow = document.createElement('div');
         arrow.className = 'arrow-marker';
-        const altDisplay = document.createElement('div');
-        altDisplay.className = 'vehicle-altitude-display';
-        container.append(arrow, altDisplay);
+        container.appendChild(arrow);
         return container;
     }
+
     function createGroundStationElement() {
         const el = document.createElement('div');
         el.className = 'groundstation-marker';
         return el;
     }
+
     function createSecondaryElement() {
         const el = document.createElement('div');
         el.className = 'secondary-marker';
         return el;
     }
+
     function createEditableWaypointMarkerElement(item) {
         const markerElement = document.createElement('div');
         markerElement.className = 'editable-wpt-marker';
@@ -203,76 +230,83 @@
         idDisplay.innerText = item.id;
         diamond.appendChild(idDisplay);
         markerElement.appendChild(diamond);
-        markerElement.dataset.altitude = item.alt;
         return markerElement;
     }
+
     function createPublishedWaypointMarkerElement(item, index) {
         const markerElement = document.createElement('div');
         markerElement.className = 'published-wpt-marker';
-        const triangle = document.createElement('div');
-        triangle.className = 'published-wpt-triangle';
         const idDisplay = document.createElement('div');
         idDisplay.className = 'published-wpt-id';
-        idDisplay.innerText = index + 1;
-        markerElement.append(triangle, idDisplay);
+        idDisplay.innerText = index;
+        markerElement.append(idDisplay);
         return markerElement;
     }
 
-    // --- Functions to save and load state from sessionStorage ---
-    function saveMapState() {
-        if (!isMapInitialized || !map) return;
-        const currentState = {
-            isInitialized: true,
-            isOnline: mapState.isOnline,
-            zoom: map.getZoom(),
-            center: map.getCenter(),
-            vehicleHistory: mapState.vehicleHistory,
-            topsideHistory: mapState.topsideHistory,
-            secondaryHistory: mapState.secondaryHistory,
-            publishedPath: mapState.publishedPath,
-            publishedLineCoords: mapState.publishedLineCoords
-        };
-        sessionStorage.setItem('mapState', JSON.stringify(currentState));
-    }
-
-    function loadMapState() {
-        const savedStateJSON = sessionStorage.getItem('mapState');
-        if (savedStateJSON) {
-            const savedState = JSON.parse(savedStateJSON);
-            if (savedState.isInitialized) {
-                mapState.isOnline = savedState.isOnline;
-                mapState.zoom = savedState.zoom;
-                mapState.center = [savedState.center.lng, savedState.center.lat];
-                mapState.vehicleHistory = savedState.vehicleHistory || [];
-                mapState.topsideHistory = savedState.topsideHistory || [];
-                mapState.secondaryHistory = savedState.secondaryHistory || [];
-                mapState.publishedPath = savedState.publishedPath || [];
-                mapState.publishedLineCoords = savedState.publishedLineCoords || [];
-                initializeMap();
-            }
-        }
-    }
-
     // --- Map Initialization Logic ---
-    function initializeMap() {
-        if (map) return;
-        const mapStyle = mapState.isOnline
-            ? 'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK'
-            : { "version": 8, "sources": { "local-tiles": { "type": "raster", "tiles": [`http://${serverIp}:5000/tiles/{z}/{x}/{y}.png`], "tileSize": 256 } }, "layers": [{ "id": "local-tiles-layer", "type": "raster", "source": "local-tiles" }] };
-        map = new maplibregl.Map({ container: 'map', zoom: mapState.zoom, center: mapState.center, style: mapStyle });
-        isMapInitialized = true;
-        document.getElementById('map-switch-button').textContent = mapState.isOnline ? 'Switch to Offline Map' : 'Switch to Online Map';
-        map.addControl(new maplibregl.NavigationControl());
+    function initializeMap(centerCoords, zoomLevel = 18) {
+        if (map) return; // Prevent creating multiple map objects
 
+        const mapStyle = isOnlineMap ?
+            'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK' :
+            {
+                "version": 8,
+                "sources": {
+                    "local-tiles": {
+                        "type": "raster",
+                        "tiles": [`http://${serverIp}:5001/tiles/{z}/{x}/{y}.png`],
+                        "tileSize": 256
+                    }
+                },
+                "layers": [{
+                    "id": "local-tiles-layer",
+                    "type": "raster",
+                    "source": "local-tiles"
+                }]
+            };
+
+        map = new maplibregl.Map({
+            container: 'map',
+            style: mapStyle,
+            center: centerCoords,
+            zoom: zoomLevel
+        });
+
+        map.on('moveend', saveMapState);
+        map.on('zoomend', saveMapState);
+
+        map.on('load', () => {
+            map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 3 } });
+
+            map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 3, 'line-opacity': 0.5 } });
+
+            map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 3, 'line-opacity': 0.5 } });
+
+            map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+            map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: { 'line-color': '#ff190a', 'line-width': 3, 'line-dasharray': [2, 4], 'line-opacity': 0.6 } });
+
+            map.addSource('published-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
+            map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
+
+            isMapInitialized = true;
+
+            // Redraw everything that might have been restored or received while map was loading
+            createEditableWaypointMarkers();
+            redrawAllFromState();
+        });
+    }
+
+    function createEditableWaypointMarkers() {
+        editableWaypointMarkers.forEach(m => m.remove());
         editableWaypointMarkers = [];
         editableWaypointsData.forEach(item => {
             const el = createEditableWaypointMarkerElement(item);
-            const marker = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([item.lon, item.lat]).addTo(map);
+            const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom' }).setLngLat([item.lon, item.lat]).addTo(map);
 
-            marker.on('dragstart', () => {
-                el.classList.add('marker-dragging');
-            });
-
+            marker.on('dragstart', () => el.classList.add('marker-dragging'));
             marker.on('drag', () => {
                 const coords = marker.getLngLat();
                 const draggedWaypoint = editableWaypointsData.find(w => w.id === item.id);
@@ -282,180 +316,236 @@
                 }
                 updateEditablePathLine();
             });
-
-            marker.on('dragend', () => onDragEnd(marker, item));
-
+            marker.on('dragend', () => {
+                el.classList.remove('marker-dragging');
+                const coords = marker.getLngLat();
+                fetch('/waypoint_drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: parseFloat(item.alt) }) });
+            });
             editableWaypointMarkers.push(marker);
         });
-
-        map.on('load', () => {
-            const getCoords = (history) => history.map(p => [p.lon, p.lat]);
-            map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.vehicleHistory) } } });
-            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 3 } });
-            map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.topsideHistory) } } });
-            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 3, 'line-opacity': 0.5 } });
-            map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.secondaryHistory) } } });
-            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 3, 'line-opacity': 0.5 } });
-            map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: { 'line-color': '#ff190a', 'line-width': 3, 'line-dasharray': [2, 4] } });
-            map.addSource('published-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: mapState.publishedLineCoords } } });
-            map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
-
-            if (mapState.vehicleHistory.length > 0) updateVehicle(mapState.vehicleHistory[mapState.vehicleHistory.length - 1]);
-            if (mapState.topsideHistory.length > 0) updateTopside(mapState.topsideHistory[mapState.topsideHistory.length - 1]);
-            if (mapState.secondaryHistory.length > 0) updateSecondary(mapState.secondaryHistory[mapState.secondaryHistory.length - 1]);
-
-            updateEditablePathLine();
-
-            if (mapState.publishedPath.length > 0) {
-                updateAndDrawPublishedPath(mapState.publishedPath, false);
-            }
-        });
-        map.on('moveend', saveMapState);
-        map.on('zoomend', saveMapState);
     }
 
-    // --- Data Update Functions ---
-    function updateVehicle(data) { if (!map) return; const el = vehicleMarker ? vehicleMarker.getElement() : createVehicleMarkerElement(); el.querySelector('.arrow-marker').style.transform = `rotate(${data.yaw}deg)`; el.querySelector('.vehicle-altitude-display').innerText = `Altitude: ${data.alt.toFixed(2)}m`; if (!vehicleMarker) { vehicleMarker = new maplibregl.Marker({ element: el }).setLngLat([data.lon, data.lat]).addTo(map); } else { vehicleMarker.setLngLat([data.lon, data.lat]); } }
-    function updateTopside(data) { if (!map) return; if (!topsideMarker) { topsideMarker = new maplibregl.Marker({ element: createGroundStationElement() }).setLngLat([data.lon, data.lat]).addTo(map); } else { topsideMarker.setLngLat([data.lon, data.lat]); } }
-    function updateSecondary(data) { if (!map) return; if (!secondaryMarker) { secondaryMarker = new maplibregl.Marker({ element: createSecondaryElement() }).setLngLat([data.lon, data.lat]).addTo(map); } else { secondaryMarker.setLngLat([data.lon, data.lat]); } }
-    function updateHistory(historyArray, data) { historyArray.push(data); if (historyArray.length > MAX_HISTORY_POINTS) historyArray.shift(); }
+    // --- Data & Path Update Functions ---
+    function redrawAllFromState() {
+        if (!isMapInitialized) return;
+        if (currentVehiclePose) updateVehicle(currentVehiclePose);
+
+        // Redraw trails from restored history
+        redrawAllTrails();
+
+        // Redraw paths using live data
+        updateEditablePathLine();
+        drawPublishedPath();
+    }
+
+    function updateVehicle(data) {
+        if (!map || !data) return;
+        const el = vehicleMarker ? vehicleMarker.getElement() : createVehicleMarkerElement();
+        el.querySelector('.arrow-marker').style.transform = `rotate(${90 - data.yaw}deg)`;
+        if (!vehicleMarker) {
+            vehicleMarker = new maplibregl.Marker({ element: el }).setLngLat([data.lon, data.lat]).addTo(map);
+        } else {
+            vehicleMarker.setLngLat([data.lon, data.lat]);
+        }
+    }
+
+    function updateTopside(data) {
+        if (!map || !data) return;
+        if (!topsideMarker) {
+            topsideMarker = new maplibregl.Marker({ element: createGroundStationElement() }).setLngLat([data.lon, data.lat]).addTo(map);
+        } else {
+            topsideMarker.setLngLat([data.lon, data.lat]);
+        }
+    }
+
+    function updateSecondary(data) {
+        if (!map || !data) return;
+        if (!secondaryMarker) {
+            secondaryMarker = new maplibregl.Marker({ element: createSecondaryElement() }).setLngLat([data.lon, data.lat]).addTo(map);
+        } else {
+            secondaryMarker.setLngLat([data.lon, data.lat]);
+        }
+    }
+
+    function updateHistory(historyArray, data) {
+        historyArray.push([data.lon, data.lat]);
+        if (historyArray.length > MAX_HISTORY_POINTS) {
+            historyArray.shift();
+        }
+    }
 
     function updateEditablePathLine() {
-        if (!isMapInitialized || !map.isStyleLoaded()) return;
-
+        if (!isMapInitialized) return;
         editableAltitudeMarkers.forEach(m => m.remove());
         editableAltitudeMarkers = [];
-
         let pathPoints = editableWaypointsData.map(w => ({ lat: parseFloat(w.lat), lon: parseFloat(w.lon), alt: parseFloat(w.alt) }));
-        if (pathPoints.length > 0 && mapState.vehicleHistory.length > 0) {
-            const lastVehiclePose = mapState.vehicleHistory[mapState.vehicleHistory.length - 1];
-            pathPoints.unshift({ lat: lastVehiclePose.lat, lon: lastVehiclePose.lon, alt: lastVehiclePose.alt });
+        if (currentVehiclePose) {
+            pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0 });
         }
-
         const lineCoords = pathPoints.map(p => [p.lon, p.lat]);
-        map.getSource('editable-waypoints-route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
-
+        map.getSource('editable-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
         for (let i = 1; i < pathPoints.length; i++) {
-            const p1 = pathPoints[i - 1];
-            const p2 = pathPoints[i];
-            const midpoint = calculateMidpoint(
-                { latitude: p1.lat, longitude: p1.lon },
-                { latitude: p2.lat, longitude: p2.lon, altitude: p2.alt }
-            );
-            const marker = createAltitudeLabel(midpoint, '#fba5b0');
-            editableAltitudeMarkers.push(marker);
+            editableAltitudeMarkers.push(createAltitudeLabel(calculateMidpoint(pathPoints[i - 1], pathPoints[i]), 'editable', '#fba5b0'));
         }
     }
 
-    function updateAndDrawPublishedPath(data, captureNewStartPose = true) {
-        if (!isMapInitialized || !map.isStyleLoaded()) return;
-
-        mapState.publishedPath = data;
-
+    function drawPublishedPath() {
+        if (!isMapInitialized) return;
+        // Clear old markers
         publishedWaypointMarkers.forEach(m => m.remove());
         publishedWaypointMarkers = [];
         publishedAltitudeMarkers.forEach(m => m.remove());
         publishedAltitudeMarkers = [];
 
-        if (!data || data.length === 0) {
-            mapState.publishedLineCoords = [];
-            map.getSource('published-waypoints-route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+        // This is the GeoPath data from ROS: [vehicle_pose, wp1_ros, wp2_ros, ...]
+        const canonicalPath = lastPublishedPath || [];
+
+        if (canonicalPath.length === 0) {
+            map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
             return;
         }
 
-        data.forEach((point, index) => {
-            const marker = new maplibregl.Marker({ element: createPublishedWaypointMarkerElement(point, index) }).setLngLat([point.lon, point.lat]).addTo(map);
-            publishedWaypointMarkers.push(marker);
+        // 1. Create markers for each waypoint *using the coordinates from the GeoPath message*.
+        canonicalPath.forEach((point, index) => {
+            publishedWaypointMarkers.push(new maplibregl.Marker({
+                element: createPublishedWaypointMarkerElement(point, index), // index is the label
+                anchor: 'bottom'
+            }).setLngLat([point.lon, point.lat]).addTo(map));
         });
 
-        let pathPoints = data.map(p => ({ lat: parseFloat(p.lat), lon: parseFloat(p.lon), alt: parseFloat(p.alt) }));
-        if (captureNewStartPose && mapState.vehicleHistory.length > 0) {
-            const lastVehiclePose = mapState.vehicleHistory[mapState.vehicleHistory.length - 1];
-            pathPoints.unshift({ lat: lastVehiclePose.lat, lon: lastVehiclePose.lon, alt: lastVehiclePose.alt });
-        } else if (!captureNewStartPose && mapState.publishedLineCoords.length > data.length) {
-            const startPose = mapState.publishedLineCoords[0];
-            pathPoints.unshift({ lat: startPose[1], lon: startPose[0], alt: data[0].alt });
-        }
+        // 2. The line's path points are also directly from the GeoPath message.
+        let linePoints = canonicalPath.map(p => ({ lat: parseFloat(p.lat), lon: parseFloat(p.lon), alt: parseFloat(p.alt) }));
 
-        mapState.publishedLineCoords = pathPoints.map(p => [p.lon, p.lat]);
-        map.getSource('published-waypoints-route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: mapState.publishedLineCoords } });
+        // 3. Set the data for the line layer on the map.
+        const lineCoords = linePoints.map(p => [p.lon, p.lat]);
+        map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
 
-        for (let i = 1; i < pathPoints.length; i++) {
-            const p1 = pathPoints[i - 1];
-            const p2 = pathPoints[i];
-            const midpoint = calculateMidpoint(
-                { latitude: p1.lat, longitude: p1.lon },
-                { latitude: p2.lat, longitude: p2.lon, altitude: p2.alt }
-            );
-            const marker = createAltitudeLabel(midpoint, '#fffca0');
-            publishedAltitudeMarkers.push(marker);
+        // 4. Create altitude labels for each segment of the complete line.
+        for (let i = 1; i < linePoints.length; i++) {
+            const p1 = { lat: linePoints[i - 1].lat, lon: linePoints[i - 1].lon };
+            const p2 = { lat: linePoints[i].lat, lon: linePoints[i].lon, alt: linePoints[i].alt };
+            publishedAltitudeMarkers.push(createAltitudeLabel(calculateMidpoint(p1, p2), 'published', '#fffca0'));
         }
     }
 
     function redrawAllTrails() {
-        if (!isMapInitialized || !map.isStyleLoaded()) return;
-        const getCoords = (history) => history.map(p => [p.lon, p.lat]);
-        map.getSource('vehicle-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.vehicleHistory) } });
-        map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.topsideHistory) } });
-        map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: getCoords(mapState.secondaryHistory) } });
+        if (!isMapInitialized) return;
+        map.getSource('vehicle-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: vehicleHistory } });
+        map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsideHistory } });
+        map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryHistory } });
     }
 
     // --- WebSocket Event Handlers ---
     socket.on('vehicle_pose_update', (data) => {
-        if (!data.lon || !data.lat) return;
-        if (!isMapInitialized) {
-            mapState.center = [data.lon, data.lat];
-            initializeMap();
+        if (!data || data.lon === undefined || data.lat === undefined) return;
+        currentVehiclePose = { ...data };
+        updateHistory(vehicleHistory, data);
+
+        if (!map) {
+            initializeMap([data.lon, data.lat]);
         }
-        updateVehicle(data);
-        updateHistory(mapState.vehicleHistory, data);
-        redrawAllTrails();
-        updateEditablePathLine();
-        saveMapState();
+
+        if (isMapInitialized) {
+            updateVehicle(data);
+            redrawAllTrails();
+            // Redraw the editable path so its start follows the vehicle in real-time.
+            // This ensures the red line starts from the current vehicle pose, not a stale one.
+            updateEditablePathLine();
+        }
     });
-    socket.on('topside_pose_update', (data) => { if (!isMapInitialized || !data.lon || !data.lat) return; updateTopside(data); updateHistory(mapState.topsideHistory, data); redrawAllTrails(); });
-    socket.on('secondary_pose_update', (data) => { if (!isMapInitialized || !data.lon || !data.lat) return; updateSecondary(data); updateHistory(mapState.secondaryHistory, data); redrawAllTrails(); });
+
+    // These handlers just add to history and place a marker.
+    // They are simpler because they don't trigger a full redraw.
+    socket.on('topside_pose_update', (data) => {
+        if (!data || data.lon === undefined || data.lat === undefined) return;
+        updateHistory(topsideHistory, data);
+        if (isMapInitialized) {
+            updateTopside(data);
+            map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsideHistory } });
+        }
+    });
+
+    socket.on('secondary_pose_update', (data) => {
+        if (!data || data.lon === undefined || data.lat === undefined) return;
+        updateHistory(secondaryHistory, data);
+        if (isMapInitialized) {
+            updateSecondary(data);
+            map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryHistory } });
+        }
+    });
 
     socket.on('published_path_update', (data) => {
-        if (!isMapInitialized) return;
-        const isSamePath = JSON.stringify(data) === JSON.stringify(mapState.publishedPath);
-        if (isSamePath) {
-            console.log("Received identical published path. Skipping redraw.");
-            return;
-        }
-        console.log("Received new published path. Redrawing line and markers.");
-        updateAndDrawPublishedPath(data, true);
-        saveMapState();
-    });
+        // --- DEBUG LOGGING FOR COORDINATE COMPARISON ---
+        console.log("--- Comparing Waypoint Data on Publish ---");
 
-    function onDragEnd(marker, item) {
-        marker.getElement().classList.remove('marker-dragging');
-
-        const coords = marker.getLngLat();
-        fetch('/waypoint_drag', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: parseFloat(marker.getElement().dataset.altitude) })
+        // Log the "editable" data that was sent
+        console.log("==> SENT (Editable Waypoints):");
+        editableWaypointsData.forEach(item => {
+            console.log(`  ID ${item.id}: lat=${item.lat}, lon=${item.lon}`);
         });
-    }
+
+        // Log the "published" data that was received back from ROS
+        console.log("==> RECEIVED (Published Path from ROS):");
+        const receivedPath = data || [];
+        if (receivedPath.length > 1) {
+            // Start from index 1 to skip vehicle pose and align with editable waypoints
+            receivedPath.slice(1).forEach((point, index) => {
+                // The corresponding editable waypoint ID is (index + 1)
+                console.log(`  Waypoint #${index + 1}: lat=${point.lat}, lon=${point.lon}`);
+            });
+        } else {
+            console.log("  Received path has no waypoints to compare.");
+        }
+        console.log("------------------------------------------");
+
+        lastPublishedPath = data || [];
+        if (isMapInitialized) {
+            drawPublishedPath();
+        }
+    });
 
     // --- Page Load & Interaction Execution ---
     document.addEventListener('DOMContentLoaded', () => {
-        loadMapState();
+        // Load history and view settings, but wait for live data to init map
+        const loadedState = loadMapState();
+        if (loadedState) {
+            const [center, zoom] = loadedState;
+            // We have a center/zoom, but we still wait for the first pose to init
+            // to ensure the vehicle is visible. The init function will use the
+            // loaded center/zoom if the pose isn't available yet.
+            // This case is handled inside initializeMap, but in practice the pose
+            // arrives almost instantly from the server cache.
+        }
+
         document.getElementById('map-switch-button').addEventListener('click', () => {
-            if (!isMapInitialized) return;
-            mapState.center = map.getCenter();
-            mapState.zoom = map.getZoom();
-            mapState.isOnline = !mapState.isOnline;
+            if (!map) return;
+            saveMapState();
+            const center = map.getCenter();
+            const zoom = map.getZoom();
             map.remove();
-            map = null; vehicleMarker = null; topsideMarker = null; secondaryMarker = null;
-            editableWaypointMarkers = []; publishedWaypointMarkers = [];
-            editableAltitudeMarkers = []; publishedAltitudeMarkers = [];
+            map = null;
+            vehicleMarker = topsideMarker = secondaryMarker = null;
+            editableWaypointMarkers = [];
+            editableAltitudeMarkers = [];
+            publishedAltitudeMarkers = [];
             isMapInitialized = false;
-            initializeMap();
+            // Re-initialize using the last known vehicle pose if available, otherwise the old center.
+            const initCoords = currentVehiclePose ? [currentVehiclePose.lon, currentVehiclePose.lat] : [center.lng, center.lat];
+            initializeMap(initCoords, zoom);
+        });
+
+        document.addEventListener('clear-history-trails', () => {
+            console.log("Clear history trails event received.");
+            vehicleHistory = [];
+            topsideHistory = [];
+            secondaryHistory = [];
+
+            if (isMapInitialized) {
+                redrawAllTrails();
+            }
             saveMapState();
         });
     });
+
     window.addEventListener('beforeunload', saveMapState);
 </script>

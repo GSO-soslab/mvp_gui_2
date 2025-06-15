@@ -20,7 +20,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Set other configurations from YAML
 app.config['HOST_IP'] = yaml_config.get('host_ip', '127.0.0.1')
-app.config['POWER_ITEMS'] = yaml_config.get('power_items', []) # For power manager
+app.config['_launch_keys_cache'] = []
 SUBPROCESS_TIMEOUT = yaml_config.get('subprocess_timeout', 5)
 
 
