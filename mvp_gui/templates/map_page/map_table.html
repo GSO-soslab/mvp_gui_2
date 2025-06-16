@@ -115,9 +115,21 @@
     // --- Global State & Configuration ---
     let map; // The map object
     let isMapInitialized = false; // Becomes true ONLY when the map 'load' event has fired
-    let isOnlineMap = true;
+    let isOnlineMap = true; // Default to offline mode
     const MAX_HISTORY_POINTS = 50;
     const MAP_STATE_KEY = 'mvpMapState';
+    const EDITABLE_PATH_STYLE_DEFAULT = {
+        'line-color': '#ff190a',
+        'line-width': 3,
+        'line-dasharray': [2, 4],
+        'line-opacity': 0.5
+    };
+    const EDITABLE_PATH_STYLE_DRAGGING = {
+        'line-color': '#ff190a',
+        'line-width': 3,
+        'line-dasharray': [2, 4],
+        'line-opacity': 1 // Original style but fully opaque
+    };
 
     // --- Client-Side Data Stores ---
     let vehicleHistory = [];
@@ -158,7 +170,7 @@
         if (savedStateJSON) {
             try {
                 const savedState = JSON.parse(savedStateJSON);
-                isOnlineMap = savedState.isOnline ?? true;
+                isOnlineMap = savedState.isOnline ?? false; // Default to offline if not in saved state
                 // Restore history trails
                 vehicleHistory = savedState.vehicleHistory || [];
                 topsideHistory = savedState.topsideHistory || [];
@@ -244,25 +256,79 @@
     }
 
     // --- Map Initialization Logic ---
-    function initializeMap(centerCoords, zoomLevel = 18) {
+    function initializeMap(centerCoords, zoomLevel = 19) {
         if (map) return; // Prevent creating multiple map objects
 
         const mapStyle = isOnlineMap ?
             'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK' :
             {
                 "version": 8,
+                "name": "Offline Vector Style",
+                "glyphs": `http://${serverIp}:5001/fonts/{fontstack}/{range}.pbf`,
                 "sources": {
-                    "local-tiles": {
-                        "type": "raster",
-                        "tiles": [`http://${serverIp}:5001/tiles/{z}/{x}/{y}.png`],
-                        "tileSize": 256
+                    "offline-source": {
+                        "type": "vector",
+                        // This URL points to the Flask backend, which now serves tiles from your .mbtiles file.
+                        "tiles": [`http://${serverIp}:5001/tiles/{z}/{x}/{y}.pbf`],
+                        // IMPORTANT: Set this to the max zoom level of your .mbtiles file.
+                        // MapLibre will not request tiles beyond this zoom, preventing 404 errors.
+                        "maxzoom": 19
                     }
                 },
-                "layers": [{
-                    "id": "local-tiles-layer",
-                    "type": "raster",
-                    "source": "local-tiles"
-                }]
+                "layers": [
+                    {
+                        "id": "background",
+                        "type": "background",
+                        "paint": { "background-color": "#f8f4f0" }
+                    },
+                    {
+                        "id": "landuse-residential",
+                        "type": "fill", "source": "offline-source", "source-layer": "landuse",
+                        "filter": ["==", "class", "residential"],
+                        "paint": { "fill-color": "#e8e0d8" }
+                    },
+                    {
+                        "id": "landcover-grass",
+                        "type": "fill", "source": "offline-source", "source-layer": "landcover",
+                        "filter": ["==", "class", "grass"],
+                        "paint": { "fill-color": "#d6e6c8" }
+                    },
+                    {
+                        "id": "park",
+                        "type": "fill", "source": "offline-source", "source-layer": "park",
+                        "paint": { "fill-color": "#d6e6c8" }
+                    },
+                    {
+                        "id": "water",
+                        "type": "fill", "source": "offline-source", "source-layer": "water",
+                        "paint": { "fill-color": "#a0c8f0" }
+                    },
+                    {
+                        "id": "transportation-line",
+                        "type": "line", "source": "offline-source", "source-layer": "transportation",
+                        "paint": {
+                            "line-color": "#cfc6b8",
+                            "line-width": { "stops": [[12, 0.5], [14, 2], [19, 10]] }
+                        }
+                    },
+                    {
+                        "id": "building",
+                        "type": "fill", "source": "offline-source", "source-layer": "building",
+                        "minzoom": 13,
+                        "paint": { "fill-color": "#d9d0c9", "fill-outline-color": "#b8b0a8" }
+                    },
+                    {
+                        "id": "transportation-name",
+                        "type": "symbol", "source": "offline-source", "source-layer": "transportation_name",
+                        "layout": {
+                            "symbol-placement": "line",
+                            "text-field": ["get", "name:latin"],
+                            "text-font": ["Noto Sans Regular"],
+                            "text-size": 12
+                        },
+                        "paint": { "text-color": "#756b61" }
+                    }
+                ]
             };
 
         map = new maplibregl.Map({
@@ -277,16 +343,16 @@
 
         map.on('load', () => {
             map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 3 } });
+            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.8 } });
 
             map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 3, 'line-opacity': 0.5 } });
+            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 2, 'line-opacity': 0.5 } });
 
             map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 3, 'line-opacity': 0.5 } });
+            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 2, 'line-opacity': 0.5 } });
 
             map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: { 'line-color': '#ff190a', 'line-width': 3, 'line-dasharray': [2, 4], 'line-opacity': 0.6 } });
+            map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: EDITABLE_PATH_STYLE_DEFAULT });
 
             map.addSource('published-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
@@ -306,7 +372,15 @@
             const el = createEditableWaypointMarkerElement(item);
             const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom' }).setLngLat([item.lon, item.lat]).addTo(map);
 
-            marker.on('dragstart', () => el.classList.add('marker-dragging'));
+            marker.on('dragstart', () => {
+                el.classList.add('marker-dragging');
+                if (map.getLayer('editable-waypoints-route-layer')) {
+                    Object.keys(EDITABLE_PATH_STYLE_DRAGGING).forEach(prop => {
+                        map.setPaintProperty('editable-waypoints-route-layer', prop, EDITABLE_PATH_STYLE_DRAGGING[prop]);
+                    });
+                }
+            });
+
             marker.on('drag', () => {
                 const coords = marker.getLngLat();
                 const draggedWaypoint = editableWaypointsData.find(w => w.id === item.id);
@@ -316,8 +390,14 @@
                 }
                 updateEditablePathLine();
             });
+
             marker.on('dragend', () => {
                 el.classList.remove('marker-dragging');
+                if (map.getLayer('editable-waypoints-route-layer')) {
+                    Object.keys(EDITABLE_PATH_STYLE_DEFAULT).forEach(prop => {
+                        map.setPaintProperty('editable-waypoints-route-layer', prop, EDITABLE_PATH_STYLE_DEFAULT[prop]);
+                    });
+                }
                 const coords = marker.getLngLat();
                 fetch('/waypoint_drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: parseFloat(item.alt) }) });
             });
@@ -448,9 +528,6 @@
         if (isMapInitialized) {
             updateVehicle(data);
             redrawAllTrails();
-            // Redraw the editable path so its start follows the vehicle in real-time.
-            // This ensures the red line starts from the current vehicle pose, not a stale one.
-            updateEditablePathLine();
         }
     });
 
@@ -519,6 +596,7 @@
 
         document.getElementById('map-switch-button').addEventListener('click', () => {
             if (!map) return;
+            isOnlineMap = !isOnlineMap; // Toggle the map state
             saveMapState();
             const center = map.getCenter();
             const zoom = map.getZoom();

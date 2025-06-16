@@ -27,7 +27,7 @@ set_power_service: gpio_manager/set_power/
 # The path to the directory containing offline map tile sets.
 # This path is relative to the project root directory (the one containing run.py).
 # Example structure: ./offline_map/satellite/Z/X/Y.png
-tiles_dir_1: ./offline_map/
+tiles_dir_1: ./mvp_gui_offline_map/
 
 ##ALPHA_RISE
 c2_commander_node: /alpha_rise/mvp_c2_commander

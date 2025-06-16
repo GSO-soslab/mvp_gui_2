@@ -1,7 +1,8 @@
-from flask import render_template, request, jsonify, redirect, url_for, send_from_directory
+from flask import render_template, request, jsonify, redirect, url_for, send_from_directory, Response
 from mvp_gui import app, db, sio_server, yaml_config
 from mvp_gui.models import Waypoint
 import os
+import sqlite3
 from werkzeug.exceptions import NotFound
 
 
@@ -59,22 +60,21 @@ def waypoint_drag():
         db.session.commit()
     return jsonify({"success": True})
 
-# This route replaces the old '/tiles/<path:filename>' to serve map tiles
-# correctly and securely. It expects a URL like /tiles/z/x/y.png
-@app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
+# This route is modified to serve .pbf vector tiles from an .mbtiles file.
+# It now expects a URL like /tiles/z/x/y.pbf
+@app.route('/tiles/<int:z>/<int:x>/<int:y>.pbf')
 def serve_tiles(z, x, y):
     """
-    Serves map tiles from the offline storage directory specified in config.yaml.
-    This function expects a tile structure like: {tiles_dir}/{tile_set_name}/{z}/{x}/{y}.png
+    Serves map tiles (.pbf vector format) from an .mbtiles file found within the
+    offline storage directory specified in config.yaml.
     """
-    # Use the path from config. The original had two confusing paths, we simplify to one.
+    # Use the path from config.
     tiles_dir_config = yaml_config.get('tiles_dir_1')
     if not tiles_dir_config:
         app.logger.error("'tiles_dir_1' is not defined in config.yaml")
         raise NotFound()
 
-    # Make path absolute to avoid ambiguity. Assume config path is relative to project root.
-    # app.root_path is the 'mvp_gui' folder.
+    # Make path absolute. app.root_path is the 'mvp_gui' folder.
     project_root = os.path.abspath(os.path.join(app.root_path, '..'))
     tiles_base_dir = os.path.join(project_root, tiles_dir_config)
 
@@ -82,26 +82,78 @@ def serve_tiles(z, x, y):
         app.logger.error(f"Offline map base directory not found at: {tiles_base_dir}")
         raise NotFound()
 
-    # The original code iterated through subdirectories, assuming multiple tile sets
-    # (e.g., 'satellite', 'streets'). We maintain that logic.
-    for tile_set_name in sorted(os.listdir(tiles_base_dir)):
-        tile_set_root = os.path.join(tiles_base_dir, tile_set_name)
-        if not os.path.isdir(tile_set_root):
-            continue
-            
-        # The directory containing the final image file (e.g., .../15/8404/)
-        tile_directory = os.path.join(tile_set_root, str(z), str(x))
+    # Find the first .mbtiles file in the directory.
+    mbtiles_file_path = None
+    try:
+        for filename in sorted(os.listdir(tiles_base_dir)):
+            if filename.endswith(".mbtiles"):
+                mbtiles_file_path = os.path.join(tiles_base_dir, filename)
+                break  # Use the first one found
+    except FileNotFoundError:
+        app.logger.error(f"Offline map base directory could not be read: {tiles_base_dir}")
+        raise NotFound()
 
-        # The filename to be served (e.g., '5443.png')
-        tile_filename = f"{y}.png"
+    if not mbtiles_file_path:
+        app.logger.error(f"No .mbtiles file found in directory: {tiles_base_dir}")
+        raise NotFound()
 
-        # Check if the specific tile file exists before serving
-        if os.path.exists(os.path.join(tile_directory, tile_filename)):
-            # send_from_directory is safe and handles headers correctly.
-            return send_from_directory(tile_directory, tile_filename)
+    # MBTiles use TMS tile scheme (flipped Y). XYZ scheme used by map clients needs conversion.
+    y_flipped = (2**z) - 1 - y
 
-    # If the tile wasn't found in any tile set, return a 404.
-    # This is standard behavior for tile servers and map libraries handle it gracefully.
+    tile_data = None
+    try:
+        # Connect to the SQLite database (.mbtiles file) in read-only mode.
+        con = sqlite3.connect(f"file:{mbtiles_file_path}?mode=ro", uri=True)
+        cur = con.cursor()
+        cur.execute(
+            "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
+            (z, x, y_flipped)
+        )
+        result = cur.fetchone()
+        if result:
+            tile_data = result[0]
+        con.close()
+    except sqlite3.Error as e:
+        app.logger.error(f"Database error for {mbtiles_file_path}: {e}")
+        raise NotFound()
+
+    if tile_data:
+        # Data from .mbtiles is typically gzipped PBF.
+        # We must send the correct headers for the client to process it.
+        # 'application/x-protobuf' is a common mimetype for PBF tiles.
+        response = Response(tile_data, mimetype='application/x-protobuf')
+        response.headers['Content-Encoding'] = 'gzip'
+        return response
+    else:
+        # Tile not found in the database for the given z, x, y.
+        # Map libraries handle 404s gracefully.
+        raise NotFound()
+
+
+@app.route('/fonts/<fontstack>/<font_range>.pbf')
+def serve_fonts(fontstack, font_range):
+    """
+    Serves font glyphs (.pbf format) for the offline map.
+    This function expects fonts to be stored in: {tiles_dir}/fonts/{fontstack}/{range}.pbf
+    """
+    tiles_dir_config = yaml_config.get('tiles_dir_1')
+    if not tiles_dir_config:
+        app.logger.error("'tiles_dir_1' is not defined in config.yaml")
+        raise NotFound()
+
+    project_root = os.path.abspath(os.path.join(app.root_path, '..'))
+    fonts_base_dir = os.path.join(project_root, tiles_dir_config, 'fonts')
+    font_stack_dir = os.path.join(fonts_base_dir, fontstack)
+    font_filename = f"{font_range}.pbf"
+
+    # Security check: ensure fontstack doesn't contain '..' to prevent path traversal
+    if '..' in fontstack or not os.path.isdir(font_stack_dir):
+        app.logger.warning(f"Font stack not found or invalid path: {font_stack_dir}")
+        raise NotFound()
+
+    if os.path.exists(os.path.join(font_stack_dir, font_filename)):
+        return send_from_directory(font_stack_dir, font_filename, mimetype='application/x-protobuf')
+        
     raise NotFound()
 
 
