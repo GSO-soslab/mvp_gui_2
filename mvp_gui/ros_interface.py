@@ -9,7 +9,7 @@ import numpy as np
 import yaml
 from nav_msgs.msg import Odometry
 from geographic_msgs.msg import GeoPoseStamped, GeoPath
-from mvp_msgs.msg import Power, Waypoint, ControlProcess, HelmState
+from mvp_msgs.msg import Waypoint, ControlProcess, HelmState
 from std_msgs.msg import Float64, Float32MultiArray, Int16, Bool, Int16MultiArray
 from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
@@ -38,6 +38,7 @@ class RosInterfaceNode(Node):
         self.power_clients = {}
         self.launch_clients = {}
         self.launch_keys = [] # Store the ordered list of launch keys
+        self.gpio_device_keys = []
         self.setup_ros_communications()
         self.setup_sio_handlers()
         
@@ -68,7 +69,7 @@ class RosInterfaceNode(Node):
         self.create_subscription(GeoPoseStamped, self.topic_ns + self.yaml_config.get('geo_pose_source', 'geopose'), self.geo_pose_callback, 10, callback_group=self.callback_group)
         self.create_subscription(HelmState, self.topic_ns + self.yaml_config.get('helm_state_get', 'helm/state'), self.helm_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Bool, self.topic_ns + self.yaml_config.get('controller_state_get', 'controller_state'), self.controller_state_callback, 10, callback_group=self.callback_group)
-        self.create_subscription(Power, self.topic_ns + self.yaml_config.get('gpio_power_get', 'gpio_power_state'), self.power_callback, 10, callback_group=self.callback_group)
+        self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('gpio_power_get', 'gpio_power_state'), self.power_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('roslaunch_state_get', 'roslaunch_state'), self.roslaunch_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(GeoPath, self.topic_ns + self.yaml_config.get('survey_geopath_source', 'survey/geopath'), self.survey_geopath_callback, 10, callback_group=self.callback_group)
 
@@ -123,6 +124,7 @@ class RosInterfaceNode(Node):
             # --- Dynamically Create Power Service Clients ---
             base_power_srv = self.service_ns + self.yaml_config.get('set_power_service', 'gpio_manager/set_power/')
             for device_name in gpio_devices:
+                self.gpio_device_keys.append(device_name)
                 if device_name not in self.power_clients:
                     full_service_name = f"{base_power_srv}{device_name}"
                     self.power_clients[device_name] = self.create_client(SetBool, full_service_name, callback_group=self.callback_group)
@@ -135,12 +137,13 @@ class RosInterfaceNode(Node):
                 if launch_key not in self.launch_clients:
                     full_service_name = f"{self.service_ns}roslaunch/{launch_key}"
                     self.launch_clients[launch_key] = self.create_client(SetBool, full_service_name, callback_group=self.callback_group)
-            
+
             self.get_logger().info(f"Dynamically created {len(self.power_clients)} power clients and {len(self.launch_clients)} launch clients.")
             self.dynamic_clients_configured = True
             
             # Send the list of launch keys to the Flask server to cache.
             if self.sio.connected:
+                self.sio.emit('update_launch_keys', {'keys': self.launch_keys})
                 self.sio.emit('update_launch_keys', {'keys': self.launch_keys})
 
         except Exception as e:
@@ -179,7 +182,11 @@ class RosInterfaceNode(Node):
 
     def power_callback(self, msg):
         if not self.sio.connected: return
-        power_data = { 'voltage': getattr(msg, 'voltage', 0.0), 'current': getattr(msg, 'current', 0.0), 'channels': getattr(msg, 'channel_states', []), 'channel_names': getattr(msg, 'channel_names', []) }
+        # power_data = { 'voltage': getattr(msg, 'voltage', 0.0), 'current': getattr(msg, 'current', 0.0), 'channels': getattr(msg, 'channel_states', []), 'channel_names': getattr(msg, 'channel_names', []) }
+
+        statuses = list(msg.data)
+        power_data = {'keys': self.gpio_device_keys,  'statuses': statuses}
+
         self.sio.emit('power_update', power_data)
 
     def helm_state_callback(self, msg):
@@ -191,22 +198,32 @@ class RosInterfaceNode(Node):
         self.sio.emit('controller_state_update', {'state': msg.data})
 
     def publish_combined_pose(self):
-        if not self.sio.connected: return
-        if not self.last_odom or not self.last_geo_pose: return
+        if not self.sio.connected: 
+            return
+        if not self.last_odom or not self.last_geo_pose: 
+            return
+
         time_diff = abs(self.last_odom.header.stamp.sec - self.last_geo_pose.header.stamp.sec)
-        if time_diff > 1.0: return
-        quad = [self.last_geo_pose.pose.orientation.x, self.last_geo_pose.pose.orientation.y, self.last_geo_pose.pose.orientation.z, self.last_geo_pose.pose.orientation.w]
-        euler_angles = euler_from_quaternion(quad)
-        pose_data = {
-            "lat": self.last_geo_pose.pose.position.latitude, "lon": self.last_geo_pose.pose.position.longitude, "alt": self.last_geo_pose.pose.position.altitude,
-            "roll": euler_angles[0] * 180 / np.pi, "pitch": euler_angles[1] * 180 / np.pi, "yaw": euler_angles[2] * 180 / np.pi,
-            "frame_id": self.last_odom.header.frame_id, "child_frame_id": self.last_odom.child_frame_id,
-            "x": self.last_odom.pose.pose.position.x, "y": self.last_odom.pose.pose.position.y, "z": self.last_odom.pose.pose.position.z,
-            "u": self.last_odom.twist.twist.linear.x, "v": self.last_odom.twist.twist.linear.y, "w": self.last_odom.twist.twist.linear.z,
-            "p": self.last_odom.twist.twist.angular.x * 180 / np.pi, "q": self.last_odom.twist.twist.angular.y * 180 / np.pi, "r": self.last_odom.twist.twist.angular.z * 180 / np.pi,
-        }
-        self.sio.emit('vehicle_pose_update', pose_data)
-        self.last_odom, self.last_geo_pose = None, None
+        if time_diff > 1.0: 
+            return
+
+        if (self.last_odom is not None) and (self.last_geo_pose is not None):
+            print("print_type")
+            print(self.last_geo_pose)
+            quad = [self.last_geo_pose.pose.orientation.x, self.last_geo_pose.pose.orientation.y, self.last_geo_pose.pose.orientation.z, self.last_geo_pose.pose.orientation.w]
+            euler_angles = euler_from_quaternion(quad)
+            pose_data = {
+                "lat": self.last_geo_pose.pose.position.latitude, "lon": self.last_geo_pose.pose.position.longitude, "alt": self.last_geo_pose.pose.position.altitude,
+                "roll": euler_angles[0] * 180 / np.pi, "pitch": euler_angles[1] * 180 / np.pi, "yaw": euler_angles[2] * 180 / np.pi,
+                "frame_id": self.last_odom.header.frame_id, "child_frame_id": self.last_odom.child_frame_id,
+                "x": self.last_odom.pose.pose.position.x, "y": self.last_odom.pose.pose.position.y, "z": self.last_odom.pose.pose.position.z,
+                "u": self.last_odom.twist.twist.linear.x, "v": self.last_odom.twist.twist.linear.y, "w": self.last_odom.twist.twist.linear.z,
+                "p": self.last_odom.twist.twist.angular.x * 180 / np.pi, "q": self.last_odom.twist.twist.angular.y * 180 / np.pi, "r": self.last_odom.twist.twist.angular.z * 180 / np.pi,
+            }
+            self.sio.emit('vehicle_pose_update', pose_data)
+            # self.last_odom, self.last_geo_pose = None, None
+        else:
+            return
 
     # --- Callbacks for ROS messages ---
     def pose_callback(self, msg):

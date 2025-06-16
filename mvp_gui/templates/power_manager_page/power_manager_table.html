@@ -37,8 +37,8 @@
 
     // Listen for power state updates from the server
     socket.on('power_update', function (data) {
-        const channelNames = data.channel_names || [];
-        const channelStatuses = data.channels || [];
+        const channelNames = data.keys || [];
+        const channelStatuses = data.statuses || [];
 
         // Check if the list of channels has changed to avoid unnecessary re-rendering.
         if (JSON.stringify(currentPowerChannelNames) !== JSON.stringify(channelNames)) {
