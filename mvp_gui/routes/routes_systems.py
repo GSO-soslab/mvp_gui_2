@@ -12,6 +12,9 @@ import sys
 @app.route('/', methods=['GET', 'POST'])
 def systems_page():
     if request.method == 'POST':
+        # This route now handles AJAX requests from the start/stop buttons.
+        # It performs the action and returns a JSON response.
+        # The client-side JavaScript will handle the page refresh.
         if 'mvpgui_start' in request.form:
             # Get the dynamically detected paths from the app config
             venv_path = current_app.config.get('VENV_ACTIVATE_PATH')
@@ -30,9 +33,11 @@ def systems_page():
         elif 'mvpgui_stop' in request.form:
             # Call the new stop function from the manager module
             ros_interface_manager.stop_mvp_gui_node_process(env)
-        return redirect(url_for('systems_page'))
+        
+        # After performing the action, return a JSON response for the AJAX call.
+        return jsonify({'status': 'ok', 'message': 'Action processed.'})
 
-    # Call the new status function from the manager module
+    # For GET requests, render the page as usual.
     mvpgui_status = ros_interface_manager.is_running()
     # Get launch files from the app config cache, populated by the ROS node
     launch_files = current_app.config.get('_launch_keys_cache', [])

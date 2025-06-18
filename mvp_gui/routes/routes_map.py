@@ -8,9 +8,8 @@ from werkzeug.exceptions import NotFound
 
 @app.route('/map', methods=['GET', 'POST'])
 def map_page():
-    # Get host IP from the request to ensure it's correct for the client.
-    # This is crucial for the offline map tile URL.
-    host_ip = request.host.split(':')[0]
+    # The host IP is no longer needed; the template will use 
+    # the request context to build full URLs.
     
     with app.app_context():
         # Fetch only persistent data for initial render
@@ -37,7 +36,6 @@ def map_page():
                            items_jsn=waypoints_data, 
                            # Pass empty or default data for real-time elements
                            vehicle_jsn={"lat": 0, "lon": 0, "yaw": 0, "alt": 0}, 
-                           host_ip=host_ip, 
                            pose_jsn=[], # History is now managed on the client
                            topside_jsn={"lat": 0, "lon": 0, "alt": 0},
                            topsidehistory_jsn=[],
@@ -60,12 +58,12 @@ def waypoint_drag():
         db.session.commit()
     return jsonify({"success": True})
 
-# This route is modified to serve .pbf vector tiles from an .mbtiles file.
-# It now expects a URL like /tiles/z/x/y.pbf
-@app.route('/tiles/<int:z>/<int:x>/<int:y>.pbf')
+# This route is modified to serve .png raster tiles from an .mbtiles file.
+# It now expects a URL like /tiles/z/x/y.png
+@app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
 def serve_tiles(z, x, y):
     """
-    Serves map tiles (.pbf vector format) from an .mbtiles file found within the
+    Serves map tiles (.png raster format) from an .mbtiles file found within the
     offline storage directory specified in config.yaml.
     """
     # Use the path from config.
@@ -118,15 +116,12 @@ def serve_tiles(z, x, y):
         raise NotFound()
 
     if tile_data:
-        # Data from .mbtiles is typically gzipped PBF.
-        # We must send the correct headers for the client to process it.
-        # 'application/x-protobuf' is a common mimetype for PBF tiles.
-        response = Response(tile_data, mimetype='application/x-protobuf')
-        response.headers['Content-Encoding'] = 'gzip'
-        return response
+        # Return the tile data with the correct content type for a PNG image.
+        return Response(tile_data, mimetype='image/png')
     else:
         # Tile not found in the database for the given z, x, y.
         # Map libraries handle 404s gracefully.
+        app.logger.warning(f"Tile not found for z={z}, x={x}, y={y} in {mbtiles_file_path}")
         raise NotFound()
 
 
@@ -134,7 +129,7 @@ def serve_tiles(z, x, y):
 def serve_fonts(fontstack, font_range):
     """
     Serves font glyphs (.pbf format) for the offline map.
-    This function expects fonts to be stored in: {tiles_dir}/fonts/{fontstack}/{range}.pbf
+    This is used for vector tiles and is unlikely to be called for raster maps.
     """
     tiles_dir_config = yaml_config.get('tiles_dir_1')
     if not tiles_dir_config:

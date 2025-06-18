@@ -4,16 +4,14 @@
     <tbody>
         <tr>
             <td>
-                <form action="/" method="post" class="d-inline">
-                    <input type="hidden" name="mvpgui_start">
-                    <button type="submit" class="btn btn-success">Start MVP GUI ROS Node</button>
-                </form>
+                <!-- Replaced form with a button that triggers a JavaScript function -->
+                <button id="mvpgui_start_btn" type="button" onclick="handleNodeAction('start')"
+                    class="btn btn-success">Start MVP GUI ROS Node</button>
             </td>
             <td>
-                <form action="/" method="post" class="d-inline">
-                    <input type="hidden" name="mvpgui_stop">
-                    <button type="submit" class="btn btn-danger">Stop MVP GUI ROS Node</button>
-                </form>
+                <!-- Replaced form with a button that triggers a JavaScript function -->
+                <button id="mvpgui_stop_btn" type="button" onclick="handleNodeAction('stop')"
+                    class="btn btn-danger">Stop MVP GUI ROS Node</button>
             </td>
         </tr>
     </tbody>
@@ -67,6 +65,36 @@
 
 
 <script>
+    // This function is called when the Start or Stop buttons are clicked.
+    // It sends an AJAX request to the server and then refreshes the page after 3 seconds.
+    function handleNodeAction(action) {
+        // Disable both buttons to prevent multiple clicks
+        document.getElementById('mvpgui_start_btn').disabled = true;
+        document.getElementById('mvpgui_stop_btn').disabled = true;
+
+        const formData = new FormData();
+        if (action === 'start') {
+            formData.append('mvpgui_start', '');
+        } else {
+            formData.append('mvpgui_stop', '');
+        }
+
+        fetch('/', {
+            method: 'POST',
+            body: formData
+        })
+            .catch(error => {
+                console.error('Error sending action request:', error);
+            })
+            .finally(() => {
+                // After the request is sent, wait 3 seconds then reload the page.
+                console.log(`Action '${action}' sent. Refreshing in 3 seconds...`);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         // This code runs only after the page is fully loaded
 

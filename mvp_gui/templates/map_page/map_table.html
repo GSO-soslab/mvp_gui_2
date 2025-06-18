@@ -115,7 +115,7 @@
     // --- Global State & Configuration ---
     let map; // The map object
     let isMapInitialized = false; // Becomes true ONLY when the map 'load' event has fired
-    let isOnlineMap = true; // Default to offline mode
+    let isOnlineMap = false; // Default to offline mode
     const MAX_HISTORY_POINTS = 50;
     const MAP_STATE_KEY = 'mvpMapState';
     const EDITABLE_PATH_STYLE_DEFAULT = {
@@ -138,7 +138,7 @@
     let currentVehiclePose = null; // Holds the most recent pose data for runtime use
     let lastPublishedPath = []; // Holds the most recent path data for runtime use
     const editableWaypointsData = {{ items_jsn | safe }};
-    const serverIp = "{{ host_ip }}";
+    const serverUrlRoot = "{{ request.url_root }}"; // Gets the app's root URL, e.g., "http://127.0.0.1:5001/"
 
     // --- Marker Storage ---
     let vehicleMarker, topsideMarker, secondaryMarker;
@@ -263,72 +263,25 @@
             'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK' :
             {
                 "version": 8,
-                "name": "Offline Vector Style",
-                "glyphs": `http://${serverIp}:5001/fonts/{fontstack}/{range}.pbf`,
+                "name": "Offline Raster Style",
+                // For raster tiles, we define a raster source, not vector.
                 "sources": {
-                    "offline-source": {
-                        "type": "vector",
-                        // This URL points to the Flask backend, which now serves tiles from your .mbtiles file.
-                        "tiles": [`http://${serverIp}:5001/tiles/{z}/{x}/{y}.pbf`],
-                        // IMPORTANT: Set this to the max zoom level of your .mbtiles file.
-                        // MapLibre will not request tiles beyond this zoom, preventing 404 errors.
+                    "offline-raster-tiles": {
+                        "type": "raster",
+                        // Use the full URL to the .png tile endpoint.
+                        "tiles": [`${serverUrlRoot}tiles/{z}/{x}/{y}.png`],
+                        "tileSize": 256, // Standard for raster tiles
+                        // Set this to your mbtiles max zoom level.
                         "maxzoom": 19
                     }
                 },
-                "layers": [
-                    {
-                        "id": "background",
-                        "type": "background",
-                        "paint": { "background-color": "#f8f4f0" }
-                    },
-                    {
-                        "id": "landuse-residential",
-                        "type": "fill", "source": "offline-source", "source-layer": "landuse",
-                        "filter": ["==", "class", "residential"],
-                        "paint": { "fill-color": "#e8e0d8" }
-                    },
-                    {
-                        "id": "landcover-grass",
-                        "type": "fill", "source": "offline-source", "source-layer": "landcover",
-                        "filter": ["==", "class", "grass"],
-                        "paint": { "fill-color": "#d6e6c8" }
-                    },
-                    {
-                        "id": "park",
-                        "type": "fill", "source": "offline-source", "source-layer": "park",
-                        "paint": { "fill-color": "#d6e6c8" }
-                    },
-                    {
-                        "id": "water",
-                        "type": "fill", "source": "offline-source", "source-layer": "water",
-                        "paint": { "fill-color": "#a0c8f0" }
-                    },
-                    {
-                        "id": "transportation-line",
-                        "type": "line", "source": "offline-source", "source-layer": "transportation",
-                        "paint": {
-                            "line-color": "#cfc6b8",
-                            "line-width": { "stops": [[12, 0.5], [14, 2], [19, 10]] }
-                        }
-                    },
-                    {
-                        "id": "building",
-                        "type": "fill", "source": "offline-source", "source-layer": "building",
-                        "minzoom": 13,
-                        "paint": { "fill-color": "#d9d0c9", "fill-outline-color": "#b8b0a8" }
-                    },
-                    {
-                        "id": "transportation-name",
-                        "type": "symbol", "source": "offline-source", "source-layer": "transportation_name",
-                        "layout": {
-                            "symbol-placement": "line",
-                            "text-field": ["get", "name:latin"],
-                            "text-font": ["Noto Sans Regular"],
-                            "text-size": 12
-                        },
-                        "paint": { "text-color": "#756b61" }
-                    }
-                ]
+                // The layers array defines what to draw. We just need one layer for the raster tiles.
+                // All other markers/paths are added on top of this later.
+                "layers": [{
+                    "id": "offline-raster-layer",
+                    "type": "raster",
+                    "source": "offline-raster-tiles"
+                }]
             };
 
         map = new maplibregl.Map({
@@ -342,6 +295,8 @@
         map.on('zoomend', saveMapState);
 
         map.on('load', () => {
+            // This code adds the sources and layers for the dynamic vector data (trails, paths).
+            // It will work on top of both online and offline base maps.
             map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.8 } });
 
