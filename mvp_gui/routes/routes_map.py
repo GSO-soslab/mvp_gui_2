@@ -63,8 +63,9 @@ def waypoint_drag():
 @app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
 def serve_tiles(z, x, y):
     """
-    Serves map tiles (.png raster format) from an .mbtiles file found within the
-    offline storage directory specified in config.yaml.
+    Serves map tiles (.png raster format) from any .mbtiles files found within the
+    offline storage directory specified in config.yaml. It searches them in
+    alphabetical order.
     """
     # Use the path from config.
     tiles_dir_config = yaml_config.get('tiles_dir_1')
@@ -80,49 +81,51 @@ def serve_tiles(z, x, y):
         app.logger.error(f"Offline map base directory not found at: {tiles_base_dir}")
         raise NotFound()
 
-    # Find the first .mbtiles file in the directory.
-    mbtiles_file_path = None
+    # Find all .mbtiles files in the directory, sorted alphabetically.
+    mbtiles_files = []
     try:
         for filename in sorted(os.listdir(tiles_base_dir)):
             if filename.endswith(".mbtiles"):
-                mbtiles_file_path = os.path.join(tiles_base_dir, filename)
-                break  # Use the first one found
+                mbtiles_files.append(os.path.join(tiles_base_dir, filename))
     except FileNotFoundError:
         app.logger.error(f"Offline map base directory could not be read: {tiles_base_dir}")
         raise NotFound()
 
-    if not mbtiles_file_path:
-        app.logger.error(f"No .mbtiles file found in directory: {tiles_base_dir}")
+    if not mbtiles_files:
+        app.logger.error(f"No .mbtiles files found in directory: {tiles_base_dir}")
         raise NotFound()
 
     # MBTiles use TMS tile scheme (flipped Y). XYZ scheme used by map clients needs conversion.
     y_flipped = (2**z) - 1 - y
 
-    tile_data = None
-    try:
-        # Connect to the SQLite database (.mbtiles file) in read-only mode.
-        con = sqlite3.connect(f"file:{mbtiles_file_path}?mode=ro", uri=True)
-        cur = con.cursor()
-        cur.execute(
-            "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
-            (z, x, y_flipped)
-        )
-        result = cur.fetchone()
-        if result:
-            tile_data = result[0]
-        con.close()
-    except sqlite3.Error as e:
-        app.logger.error(f"Database error for {mbtiles_file_path}: {e}")
-        raise NotFound()
+    # Iterate through each mbtiles file and try to find the tile.
+    for mbtiles_file_path in mbtiles_files:
+        tile_data = None
+        try:
+            # Connect to the SQLite database (.mbtiles file) in read-only mode.
+            con = sqlite3.connect(f"file:{mbtiles_file_path}?mode=ro", uri=True)
+            cur = con.cursor()
+            cur.execute(
+                "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
+                (z, x, y_flipped)
+            )
+            result = cur.fetchone()
+            if result:
+                tile_data = result[0]
+            con.close()
+        except sqlite3.Error as e:
+            app.logger.error(f"Database error while accessing {mbtiles_file_path}: {e}")
+            # If one file is corrupt or has an issue, log it and continue to the next one.
+            continue
 
-    if tile_data:
-        # Return the tile data with the correct content type for a PNG image.
-        return Response(tile_data, mimetype='image/png')
-    else:
-        # Tile not found in the database for the given z, x, y.
-        # Map libraries handle 404s gracefully.
-        app.logger.warning(f"Tile not found for z={z}, x={x}, y={y} in {mbtiles_file_path}")
-        raise NotFound()
+        if tile_data:
+            # Tile found, return it immediately.
+            return Response(tile_data, mimetype='image/png')
+
+    # If we get here, the tile was not found in any of the mbtiles files.
+    # Map libraries handle 404s gracefully.
+    app.logger.warning(f"Tile not found for z={z}, x={x}, y={y} in any mbtiles file in {tiles_base_dir}")
+    raise NotFound()
 
 
 @app.route('/fonts/<fontstack>/<font_range>.pbf')
