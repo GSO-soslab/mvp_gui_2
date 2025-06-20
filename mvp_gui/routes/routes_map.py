@@ -8,9 +8,8 @@ from werkzeug.exceptions import NotFound
 
 @app.route('/map', methods=['GET', 'POST'])
 def map_page():
-    # Get host IP from the request to ensure it's correct for the client.
-    # This is crucial for the offline map tile URL.
-    host_ip = request.host.split(':')[0]
+    # The host IP is no longer needed; the template will use 
+    # the request context to build full URLs.
     
     with app.app_context():
         # Fetch only persistent data for initial render
@@ -37,7 +36,6 @@ def map_page():
                            items_jsn=waypoints_data, 
                            # Pass empty or default data for real-time elements
                            vehicle_jsn={"lat": 0, "lon": 0, "yaw": 0, "alt": 0}, 
-                           host_ip=host_ip, 
                            pose_jsn=[], # History is now managed on the client
                            topside_jsn={"lat": 0, "lon": 0, "alt": 0},
                            topsidehistory_jsn=[],
@@ -60,13 +58,14 @@ def waypoint_drag():
         db.session.commit()
     return jsonify({"success": True})
 
-# This route is modified to serve .pbf vector tiles from an .mbtiles file.
-# It now expects a URL like /tiles/z/x/y.pbf
-@app.route('/tiles/<int:z>/<int:x>/<int:y>.pbf')
+# This route is modified to serve .png raster tiles from an .mbtiles file.
+# It now expects a URL like /tiles/z/x/y.png
+@app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
 def serve_tiles(z, x, y):
     """
-    Serves map tiles (.pbf vector format) from an .mbtiles file found within the
-    offline storage directory specified in config.yaml.
+    Serves map tiles (.png raster format) from any .mbtiles files found within the
+    offline storage directory specified in config.yaml. It searches them in
+    alphabetical order.
     """
     # Use the path from config.
     tiles_dir_config = yaml_config.get('tiles_dir_1')
@@ -82,59 +81,58 @@ def serve_tiles(z, x, y):
         app.logger.error(f"Offline map base directory not found at: {tiles_base_dir}")
         raise NotFound()
 
-    # Find the first .mbtiles file in the directory.
-    mbtiles_file_path = None
+    # Find all .mbtiles files in the directory, sorted alphabetically.
+    mbtiles_files = []
     try:
         for filename in sorted(os.listdir(tiles_base_dir)):
             if filename.endswith(".mbtiles"):
-                mbtiles_file_path = os.path.join(tiles_base_dir, filename)
-                break  # Use the first one found
+                mbtiles_files.append(os.path.join(tiles_base_dir, filename))
     except FileNotFoundError:
         app.logger.error(f"Offline map base directory could not be read: {tiles_base_dir}")
         raise NotFound()
 
-    if not mbtiles_file_path:
-        app.logger.error(f"No .mbtiles file found in directory: {tiles_base_dir}")
+    if not mbtiles_files:
+        app.logger.error(f"No .mbtiles files found in directory: {tiles_base_dir}")
         raise NotFound()
 
     # MBTiles use TMS tile scheme (flipped Y). XYZ scheme used by map clients needs conversion.
     y_flipped = (2**z) - 1 - y
 
-    tile_data = None
-    try:
-        # Connect to the SQLite database (.mbtiles file) in read-only mode.
-        con = sqlite3.connect(f"file:{mbtiles_file_path}?mode=ro", uri=True)
-        cur = con.cursor()
-        cur.execute(
-            "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
-            (z, x, y_flipped)
-        )
-        result = cur.fetchone()
-        if result:
-            tile_data = result[0]
-        con.close()
-    except sqlite3.Error as e:
-        app.logger.error(f"Database error for {mbtiles_file_path}: {e}")
-        raise NotFound()
+    # Iterate through each mbtiles file and try to find the tile.
+    for mbtiles_file_path in mbtiles_files:
+        tile_data = None
+        try:
+            # Connect to the SQLite database (.mbtiles file) in read-only mode.
+            con = sqlite3.connect(f"file:{mbtiles_file_path}?mode=ro", uri=True)
+            cur = con.cursor()
+            cur.execute(
+                "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
+                (z, x, y_flipped)
+            )
+            result = cur.fetchone()
+            if result:
+                tile_data = result[0]
+            con.close()
+        except sqlite3.Error as e:
+            app.logger.error(f"Database error while accessing {mbtiles_file_path}: {e}")
+            # If one file is corrupt or has an issue, log it and continue to the next one.
+            continue
 
-    if tile_data:
-        # Data from .mbtiles is typically gzipped PBF.
-        # We must send the correct headers for the client to process it.
-        # 'application/x-protobuf' is a common mimetype for PBF tiles.
-        response = Response(tile_data, mimetype='application/x-protobuf')
-        response.headers['Content-Encoding'] = 'gzip'
-        return response
-    else:
-        # Tile not found in the database for the given z, x, y.
-        # Map libraries handle 404s gracefully.
-        raise NotFound()
+        if tile_data:
+            # Tile found, return it immediately.
+            return Response(tile_data, mimetype='image/png')
+
+    # If we get here, the tile was not found in any of the mbtiles files.
+    # Map libraries handle 404s gracefully.
+    app.logger.warning(f"Tile not found for z={z}, x={x}, y={y} in any mbtiles file in {tiles_base_dir}")
+    raise NotFound()
 
 
 @app.route('/fonts/<fontstack>/<font_range>.pbf')
 def serve_fonts(fontstack, font_range):
     """
     Serves font glyphs (.pbf format) for the offline map.
-    This function expects fonts to be stored in: {tiles_dir}/fonts/{fontstack}/{range}.pbf
+    This is used for vector tiles and is unlikely to be called for raster maps.
     """
     tiles_dir_config = yaml_config.get('tiles_dir_1')
     if not tiles_dir_config:

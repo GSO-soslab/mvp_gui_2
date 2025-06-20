@@ -12,8 +12,9 @@
     <script src="{{ url_for('static', filename='js/maplibre-gl.js') }}"></script>
     <script src="{{ url_for('static', filename='js/plotly-latest.min.js') }}"></script>
     <!-- Add Socket.IO client library -->
-    <script src="https://cdn.socket.io/4.5.2/socket.io.min.js"></script>
-    <script>
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+
+<script>
         // Establish a global Socket.IO connection
         const socket = io();
         socket.on('connect', () => {

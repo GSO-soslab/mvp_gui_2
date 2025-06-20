@@ -17,6 +17,8 @@ from std_srvs.srv import SetBool, Trigger
 from rcl_interfaces.srv import GetParameters
 import os
 import logging
+# New import for message synchronization
+import message_filters
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -41,10 +43,6 @@ class RosInterfaceNode(Node):
         self.gpio_device_keys = []
         self.setup_ros_communications()
         self.setup_sio_handlers()
-        
-        # Store last known data to combine messages
-        self.last_odom = None
-        self.last_geo_pose = None
 
         # --- Asynchronously fetch parameters from C2 Commander node ---
         if self.c2_commander_node_name:
@@ -56,17 +54,36 @@ class RosInterfaceNode(Node):
 
     def setup_ros_communications(self):
         """
-        This function now only sets up STATIC subscribers and clients.
-        Dynamic clients (power, launch) are set up after fetching params.
+        This function sets up subscribers and clients. Dynamic clients for
+        power and launch are set up later after fetching parameters.
         """
         self.callback_group = ReentrantCallbackGroup()
         
         self.topic_ns = self.yaml_config.get('topic_ns', '/default_ns/')
         self.service_ns = self.yaml_config.get('service_ns', '/default_ns/')
         
-        # --- Subscribers ---
-        self.create_subscription(Odometry, self.topic_ns + self.yaml_config.get('poses_source', 'odometry'), self.pose_callback, 10, callback_group=self.callback_group)
-        self.create_subscription(GeoPoseStamped, self.topic_ns + self.yaml_config.get('geo_pose_source', 'geopose'), self.geo_pose_callback, 10, callback_group=self.callback_group)
+        # --- Synchronized Pose Subscribers ---
+        # Using message_filters to synchronize Odometry and GeoPoseStamped messages
+        # based on their timestamps. This is more robust than storing the last
+        # message of each type and calling a publisher from both callbacks.
+        odom_topic = self.topic_ns + self.yaml_config.get('poses_source', 'odometry')
+        geopose_topic = self.topic_ns + self.yaml_config.get('geo_pose_source', 'geopose')
+
+        odom_sub = message_filters.Subscriber(self, Odometry, odom_topic)
+        geopose_sub = message_filters.Subscriber(self, GeoPoseStamped, geopose_topic)
+
+        # ApproximateTimeSynchronizer will find pairs of messages that are close in time.
+        # The 'slop' parameter defines the maximum time difference (in seconds)
+        # for messages to be considered a match.
+        self.time_synchronizer = message_filters.ApproximateTimeSynchronizer(
+            [odom_sub, geopose_sub],
+            queue_size=10,
+            slop=0.2
+        )
+        self.time_synchronizer.registerCallback(self.synchronized_pose_callback)
+        self.get_logger().info(f"Synchronizing pose on odom topic '{odom_topic}' and geopose topic '{geopose_topic}'.")
+        
+        # --- Other Subscribers ---
         self.create_subscription(HelmState, self.topic_ns + self.yaml_config.get('helm_state_get', 'helm/state'), self.helm_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Bool, self.topic_ns + self.yaml_config.get('controller_state_get', 'controller_state'), self.controller_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('gpio_power_get', 'gpio_power_state'), self.power_callback, 10, callback_group=self.callback_group)
@@ -182,8 +199,6 @@ class RosInterfaceNode(Node):
 
     def power_callback(self, msg):
         if not self.sio.connected: return
-        # power_data = { 'voltage': getattr(msg, 'voltage', 0.0), 'current': getattr(msg, 'current', 0.0), 'channels': getattr(msg, 'channel_states', []), 'channel_names': getattr(msg, 'channel_names', []) }
-
         statuses = list(msg.data)
         power_data = {'keys': self.gpio_device_keys,  'statuses': statuses}
 
@@ -197,42 +212,46 @@ class RosInterfaceNode(Node):
         if not self.sio.connected: return
         self.sio.emit('controller_state_update', {'state': msg.data})
 
-    def publish_combined_pose(self):
-        if not self.sio.connected: 
-            return
-        if not self.last_odom or not self.last_geo_pose: 
-            return
-
-        time_diff = abs(self.last_odom.header.stamp.sec - self.last_geo_pose.header.stamp.sec)
-        if time_diff > 1.0: 
-            return
-
-        if (self.last_odom is not None) and (self.last_geo_pose is not None):
-            print("print_type")
-            print(self.last_geo_pose)
-            quad = [self.last_geo_pose.pose.orientation.x, self.last_geo_pose.pose.orientation.y, self.last_geo_pose.pose.orientation.z, self.last_geo_pose.pose.orientation.w]
-            euler_angles = euler_from_quaternion(quad)
-            pose_data = {
-                "lat": self.last_geo_pose.pose.position.latitude, "lon": self.last_geo_pose.pose.position.longitude, "alt": self.last_geo_pose.pose.position.altitude,
-                "roll": euler_angles[0] * 180 / np.pi, "pitch": euler_angles[1] * 180 / np.pi, "yaw": euler_angles[2] * 180 / np.pi,
-                "frame_id": self.last_odom.header.frame_id, "child_frame_id": self.last_odom.child_frame_id,
-                "x": self.last_odom.pose.pose.position.x, "y": self.last_odom.pose.pose.position.y, "z": self.last_odom.pose.pose.position.z,
-                "u": self.last_odom.twist.twist.linear.x, "v": self.last_odom.twist.twist.linear.y, "w": self.last_odom.twist.twist.linear.z,
-                "p": self.last_odom.twist.twist.angular.x * 180 / np.pi, "q": self.last_odom.twist.twist.angular.y * 180 / np.pi, "r": self.last_odom.twist.twist.angular.z * 180 / np.pi,
-            }
-            self.sio.emit('vehicle_pose_update', pose_data)
-            # self.last_odom, self.last_geo_pose = None, None
-        else:
+    # --- NEW: Callback for synchronized pose messages ---
+    def synchronized_pose_callback(self, odom_msg, geo_pose_msg):
+        """
+        Callback for synchronized Odometry and GeoPoseStamped messages.
+        This function is called by the ApproximateTimeSynchronizer only when it
+        receives a pair of messages that are close in time. It combines them
+        into a single data structure and emits it to the web GUI.
+        """
+        if not self.sio.connected:
             return
 
-    # --- Callbacks for ROS messages ---
-    def pose_callback(self, msg):
-        self.last_odom = msg
-        self.publish_combined_pose()
-
-    def geo_pose_callback(self, msg):
-        self.last_geo_pose = msg
-        self.publish_combined_pose()
+        # The synchronizer ensures we have a matched pair of odom_msg and geo_pose_msg.
+        # We can now combine and emit them without checking for existence or time diff.
+        quad = [
+            geo_pose_msg.pose.orientation.x,
+            geo_pose_msg.pose.orientation.y,
+            geo_pose_msg.pose.orientation.z,
+            geo_pose_msg.pose.orientation.w,
+        ]
+        euler_angles = euler_from_quaternion(quad)
+        pose_data = {
+            "lat": geo_pose_msg.pose.position.latitude,
+            "lon": geo_pose_msg.pose.position.longitude,
+            "alt": geo_pose_msg.pose.position.altitude,
+            "roll": euler_angles[0] * 180 / np.pi,
+            "pitch": euler_angles[1] * 180 / np.pi,
+            "yaw": euler_angles[2] * 180 / np.pi,
+            "frame_id": odom_msg.header.frame_id,
+            "child_frame_id": odom_msg.child_frame_id,
+            "x": odom_msg.pose.pose.position.x,
+            "y": odom_msg.pose.pose.position.y,
+            "z": odom_msg.pose.pose.position.z,
+            "u": odom_msg.twist.twist.linear.x,
+            "v": odom_msg.twist.twist.linear.y,
+            "w": odom_msg.twist.twist.linear.z,
+            "p": odom_msg.twist.twist.angular.x * 180 / np.pi,
+            "q": odom_msg.twist.twist.angular.y * 180 / np.pi,
+            "r": odom_msg.twist.twist.angular.z * 180 / np.pi,
+        }
+        self.sio.emit('vehicle_pose_update', pose_data)
 
     # --- Methods to call ROS services ---
     def call_launch_file(self, launch_key, status):

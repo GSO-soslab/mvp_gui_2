@@ -11,6 +11,11 @@ Mission
       <input type="hidden" name="add" value="add">
       <button type="submit" class="btn btn-primary"> Add a Waypoint </button>
     </form>
+    <form action="{{ url_for('reset_waypoints') }}" method="post" class="d-inline">
+      <button type="submit" class="btn btn-danger"
+        onclick="return confirm('This will delete all current waypoints and create a new one near the vehicle. Are you sure?');">
+        Reset Waypoints </button>
+    </form>
     <button onclick="refreshPage()" class="btn btn-info"> Refresh Waypoints</button>
   </div>
 
