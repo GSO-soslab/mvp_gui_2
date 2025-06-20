@@ -1,8 +1,7 @@
 from flask import render_template, request, redirect, url_for, jsonify
-from mvp_gui import app, db
+from mvp_gui import app, db, events
 from mvp_gui.models import Waypoint
 from mvp_gui.forms import WaypointForm
-from mvp_gui.events import last_vehicle_pose
 import xml.etree.ElementTree as ET
 import os
 
@@ -99,11 +98,11 @@ def reset_waypoints():
         db.session.query(Waypoint).delete()
 
         # Step 2: Check for vehicle pose and create a new waypoint.
-        if last_vehicle_pose:
+        if events.last_vehicle_pose:
             # An offset of 0.0001 degrees latitude is roughly 11 meters.
-            lat_offset = last_vehicle_pose.get('lat', 0) + 0.0001
-            lon_offset = last_vehicle_pose.get('lon', 0)
-            alt_offset = last_vehicle_pose.get('alt', 0)
+            lat_offset = events.last_vehicle_pose.get('lat', 0) + 0.0001
+            lon_offset = events.last_vehicle_pose.get('lon', 0)
+            alt_offset = events.last_vehicle_pose.get('alt', 0)
             
             new_waypoint = Waypoint(lat=lat_offset, lon=lon_offset, alt=alt_offset)
             db.session.add(new_waypoint)
