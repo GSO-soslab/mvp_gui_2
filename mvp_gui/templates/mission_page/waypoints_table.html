@@ -1,58 +1,56 @@
 <div id="mission_waypoints" class="mission_waypoints">
-<table class="table table-hover table-dark">
-    <thead>
-        <tr>
-            <!-- Your Columns HERE -->
-            <th scope="col">ID</th>
-            <th scope="col">Laitude [deg]</th>
-            <th scope="col">Longitude[deg]</th>
-            <th scope="col">altitude [m]</th>
-        </tr>
-    </thead>
-    
-    
-    <tbody>
-        <!-- Your rows inside the table HERE: -->
-        {% if waypoints|length >=1 %}
-            {% for item in waypoints%}
-                <tr>
-                    <td>{{ item.id }}</td>
-                    <td>{{ item.lat }}</td>
-                    <td>{{ item.lon }}</td>
-                    <td>{{ item.alt }}</td>
-                    <td>
-                    <form action="/mission" method="post">
-                        <input type="hidden" name="edit" value= "{{ item.id }}" >
-                        <button type="submit"> Edit </button>
-                    </form>
-                    </td>
-                    <td>
-                    <form action="/mission" method="post">
-                        <input type="hidden" name="copy" value= "{{ item.id }}" >
-                        <button type="submit"> Copy </button>
-                    </form>
-                    </td>
-                    <td>
-                    <form action="/mission" method="post">
-                        <input type="hidden" name="delete" value= "{{ item.id }}" >
-                        <button type="submit"> Delete </button>                            
-                    </form>
-                    </td>
-                </tr>
-            {% endfor %}
-        {% else %}
+    <table class="table table-hover table-dark">
+        <thead>
             <tr>
-                <td>None</td>
-                <td>None</td>
-                <td>None</td>
-                <td>None</td>
-                <td>None</td>
-                <td>None</td>
-                <td>None</td>
+                <th scope="col">ID</th>
+                <th scope="col">Latitude [deg]</th>
+                <th scope="col">Longitude [deg]</th>
+                <th scope="col">Altitude [m]</th>
+                <th scope="col" colspan="3" class="text-center">Actions</th>
             </tr>
-        {% endif %}
-    </tbody>
-   
-</table>
-</div>
+        </thead>
 
+
+        <tbody>
+            {% if waypoints|length >=1 %}
+            {% for item in waypoints%}
+            <tr>
+                <td>{{ item.id }}</td>
+                <td>{{ item.lat }}</td>
+                <td>{{ item.lon }}</td>
+                <td>{{ item.alt }}</td>
+                <td>
+                    <form action="/mission" method="post" style="margin: 0;">
+                        <input type="hidden" name="edit" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-sm btn-secondary"> Edit </button>
+                    </form>
+                </td>
+                <td>
+                    <form action="/mission" method="post" style="margin: 0;">
+                        <input type="hidden" name="copy" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-sm btn-info"> Copy </button>
+                    </form>
+                </td>
+                <td>
+                    <form action="/mission" method="post" style="margin: 0;">
+                        <input type="hidden" name="delete" value="{{ item.id }}">
+                        <button type="submit" class="btn btn-sm btn-danger"> Delete </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                {% if no_pose_available %}
+                <td colspan="7" class="text-center font-italic text-muted py-3">No vehicle pose available. Waypoints
+                    cleared.</td>
+                {% else %}
+                <td colspan="7" class="text-center font-italic text-muted py-3">No waypoints in the database. Add one or
+                    upload a KML file.</td>
+                {% endif %}
+            </tr>
+            {% endif %}
+        </tbody>
+
+    </table>
+</div>

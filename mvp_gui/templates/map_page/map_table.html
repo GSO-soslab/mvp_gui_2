@@ -9,6 +9,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        z-index: 0;
     }
 
     .published-wpt-id {
@@ -23,7 +24,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        z-index: 0;
+        z-index: 10;
     }
 
     .editable-wpt-diamond {
@@ -46,7 +47,7 @@
 
     /* --- Style for when a waypoint is being dragged --- */
     .editable-wpt-marker.marker-dragging {
-        z-index: 0;
+        z-index: 20;
     }
 
     .editable-wpt-marker.marker-dragging .editable-wpt-diamond {
@@ -116,7 +117,7 @@
     let map; // The map object
     let isMapInitialized = false; // Becomes true ONLY when the map 'load' event has fired
     let isOnlineMap = false; // Default to offline mode
-    const MAX_HISTORY_POINTS = 50;
+    const MAX_HISTORY_POINTS = 150;
     const MAP_STATE_KEY = 'mvpMapState';
     const EDITABLE_PATH_STYLE_DEFAULT = {
         'line-color': '#ff190a',
@@ -298,7 +299,7 @@
             // This code adds the sources and layers for the dynamic vector data (trails, paths).
             // It will work on top of both online and offline base maps.
             map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.8 } });
+            map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.7 } });
 
             map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 2, 'line-opacity': 0.5 } });
@@ -507,28 +508,28 @@
     });
 
     socket.on('published_path_update', (data) => {
-        // --- DEBUG LOGGING FOR COORDINATE COMPARISON ---
-        console.log("--- Comparing Waypoint Data on Publish ---");
+        // // --- DEBUG LOGGING FOR COORDINATE COMPARISON ---
+        // console.log("--- Comparing Waypoint Data on Publish ---");
 
-        // Log the "editable" data that was sent
-        console.log("==> SENT (Editable Waypoints):");
-        editableWaypointsData.forEach(item => {
-            console.log(`  ID ${item.id}: lat=${item.lat}, lon=${item.lon}`);
-        });
+        // // Log the "editable" data that was sent
+        // console.log("==> SENT (Editable Waypoints):");
+        // editableWaypointsData.forEach(item => {
+        //     console.log(`  ID ${item.id}: lat=${item.lat}, lon=${item.lon}`);
+        // });
 
-        // Log the "published" data that was received back from ROS
-        console.log("==> RECEIVED (Published Path from ROS):");
-        const receivedPath = data || [];
-        if (receivedPath.length > 1) {
-            // Start from index 1 to skip vehicle pose and align with editable waypoints
-            receivedPath.slice(1).forEach((point, index) => {
-                // The corresponding editable waypoint ID is (index + 1)
-                console.log(`  Waypoint #${index + 1}: lat=${point.lat}, lon=${point.lon}`);
-            });
-        } else {
-            console.log("  Received path has no waypoints to compare.");
-        }
-        console.log("------------------------------------------");
+        // // Log the "published" data that was received back from ROS
+        // console.log("==> RECEIVED (Published Path from ROS):");
+        // const receivedPath = data || [];
+        // if (receivedPath.length > 1) {
+        //     // Start from index 1 to skip vehicle pose and align with editable waypoints
+        //     receivedPath.slice(1).forEach((point, index) => {
+        //         // The corresponding editable waypoint ID is (index + 1)
+        //         console.log(`  Waypoint #${index + 1}: lat=${point.lat}, lon=${point.lon}`);
+        //     });
+        // } else {
+        //     console.log("  Received path has no waypoints to compare.");
+        // }
+        // console.log("------------------------------------------");
 
         lastPublishedPath = data || [];
         if (isMapInitialized) {

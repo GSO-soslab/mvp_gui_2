@@ -2,6 +2,7 @@ from flask import render_template, request, redirect, url_for, jsonify
 from mvp_gui import app, db
 from mvp_gui.models import Waypoint
 from mvp_gui.forms import WaypointForm
+from mvp_gui.events import last_vehicle_pose
 import xml.etree.ElementTree as ET
 import os
 
@@ -52,6 +53,8 @@ def generate_waypoints_from_kml(file_path, replace_flag):
 
 @app.route("/mission", methods=['GET', 'POST'])
 def mission_page():
+    # Check for a flag from the reset operation
+    no_pose_available = request.args.get('no_pose_reset') == 'true'
     waypoints = Waypoint.query.order_by(Waypoint.id).all()
     
     if request.method == 'POST':
@@ -83,7 +86,38 @@ def mission_page():
                 renumber_waypoints()
             return redirect(url_for('mission_page'))
 
-    return render_template("mission.html", waypoints=waypoints, current_page="mission")
+    return render_template("mission.html", waypoints=waypoints, current_page="mission", no_pose_available=no_pose_available)
+
+@app.route("/mission/reset_waypoints", methods=['POST'])
+def reset_waypoints():
+    """
+    Deletes all waypoints and creates a single new one based on vehicle pose.
+    If no vehicle pose is available, all waypoints are simply deleted.
+    """
+    with app.app_context():
+        # Step 1: Delete all waypoints from the table.
+        db.session.query(Waypoint).delete()
+
+        # Step 2: Check for vehicle pose and create a new waypoint.
+        if last_vehicle_pose:
+            # An offset of 0.0001 degrees latitude is roughly 11 meters.
+            lat_offset = last_vehicle_pose.get('lat', 0) + 0.0001
+            lon_offset = last_vehicle_pose.get('lon', 0)
+            alt_offset = last_vehicle_pose.get('alt', 0)
+            
+            new_waypoint = Waypoint(lat=lat_offset, lon=lon_offset, alt=alt_offset)
+            db.session.add(new_waypoint)
+            db.session.commit()
+            
+            # Since we added one, renumber it to have ID 1.
+            renumber_waypoints()
+            return redirect(url_for('mission_page'))
+        else:
+            # No vehicle pose is available. Just commit the deletion.
+            db.session.commit()
+            # Redirect with a flag to indicate why the list is empty.
+            return redirect(url_for('mission_page', no_pose_reset='true'))
+
 
 @app.route('/mission/upload', methods=['POST'])
 def upload_file():
