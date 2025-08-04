@@ -16,7 +16,7 @@ def map_page():
         waypoints = Waypoint.query.order_by(Waypoint.id).all()
         # CORRECTED: Since lat/lon are stored as Float, no conversion is needed.
         # waypoint.alt is still a Decimal from Numeric, so it needs to be converted to float.
-        waypoints_data = [{"id": waypoint.id, "lat": waypoint.lat, "lon": waypoint.lon, "alt": float(waypoint.alt)} for waypoint in waypoints]
+        waypoints_data = [{"id": waypoint.id, "lat": waypoint.lat, "lon": waypoint.lon, "alt": waypoint.alt, "surge": waypoint.surge} for waypoint in waypoints]
 
     # This POST handler is for the legacy form-based buttons.
     # Modern interaction is handled via direct WebSocket events from the client.
@@ -55,6 +55,7 @@ def waypoint_drag():
         waypoint.lon = data['lng']
         waypoint.lat = data['lat']
         waypoint.alt = data['alt']
+        waypoint.surge = data['surge']
         db.session.commit()
     return jsonify({"success": True})
 

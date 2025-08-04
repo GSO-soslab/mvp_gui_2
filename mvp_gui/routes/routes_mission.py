@@ -18,7 +18,7 @@ def renumber_waypoints():
     with app.app_context():
         # Step 1: Fetch all waypoints, ordered by their current ID, and store their data.
         # This ensures that we maintain the existing order of waypoints.
-        waypoints_data = [(w.lat, w.lon, w.alt) for w in Waypoint.query.order_by(Waypoint.id).all()]
+        waypoints_data = [(w.lat, w.lon, w.alt, w.surge) for w in Waypoint.query.order_by(Waypoint.id).all()]
 
         # Step 2: Delete all waypoints from the table.
         # This is a bulk delete operation.
@@ -27,7 +27,7 @@ def renumber_waypoints():
         # Step 3: Re-insert all waypoints with new, sequential IDs.
         for i, data in enumerate(waypoints_data):
             # Create a new Waypoint object with an explicit ID.
-            new_waypoint = Waypoint(id=i + 1, lat=data[0], lon=data[1], alt=data[2])
+            new_waypoint = Waypoint(id=i + 1, lat=data[0], lon=data[1], alt=data[2], surge=data[3])
             db.session.add(new_waypoint)
         
         # Step 4: Commit the entire transaction to the database.
@@ -44,7 +44,8 @@ def generate_waypoints_from_kml(file_path, replace_flag):
     for placemark in root.findall('.//{http://www.opengis.net/kml/2.2}Placemark'):
         coordinates = placemark.find('.//{http://www.opengis.net/kml/2.2}coordinates').text
         lon, lat, alt = map(float, coordinates.strip().split(','))
-        waypoint = Waypoint(lat=lat, lon=lon, alt=alt)
+        surge = float(0)
+        waypoint = Waypoint(lat=lat, lon=lon, alt=alt, surge=surge)
         db.session.add(waypoint)
     db.session.commit()
     # After adding all waypoints, renumber them to ensure sequential IDs.
@@ -78,7 +79,7 @@ def mission_page():
             copy_id = request.form['copy']
             entry = Waypoint.query.get(copy_id)
             if entry:
-                new_entry = Waypoint(lat=entry.lat, lon=entry.lon, alt=entry.alt)
+                new_entry = Waypoint(lat=entry.lat, lon=entry.lon, alt=entry.alt, surge=entry.surge)
                 db.session.add(new_entry)
                 db.session.commit()
                 # After copying (which adds a waypoint), renumber all.
@@ -103,8 +104,10 @@ def reset_waypoints():
             lat_offset = events.last_vehicle_pose.get('lat', 0) + 0.0001
             lon_offset = events.last_vehicle_pose.get('lon', 0)
             alt_offset = events.last_vehicle_pose.get('alt', 0)
-            
-            new_waypoint = Waypoint(lat=lat_offset, lon=lon_offset, alt=alt_offset)
+            # CORRECTED: The vehicle pose data uses 'u' for surge velocity.
+            surge_offset = events.last_vehicle_pose.get('u', 0)
+
+            new_waypoint = Waypoint(lat=lat_offset, lon=lon_offset, alt=alt_offset, surge=surge_offset)
             db.session.add(new_waypoint)
             db.session.commit()
             

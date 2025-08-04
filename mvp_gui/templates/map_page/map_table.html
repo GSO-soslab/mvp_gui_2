@@ -355,7 +355,7 @@
                     });
                 }
                 const coords = marker.getLngLat();
-                fetch('/waypoint_drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: parseFloat(item.alt) }) });
+                fetch('/waypoint_drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: item.alt, surge: item.surge }) });
             });
             editableWaypointMarkers.push(marker);
         });
@@ -414,7 +414,7 @@
         if (!isMapInitialized) return;
         editableAltitudeMarkers.forEach(m => m.remove());
         editableAltitudeMarkers = [];
-        let pathPoints = editableWaypointsData.map(w => ({ lat: parseFloat(w.lat), lon: parseFloat(w.lon), alt: parseFloat(w.alt) }));
+        let pathPoints = editableWaypointsData.map(w => ({ lat: w.lat, lon: w.lon, alt: w.alt, surge: w.surge}));
         if (currentVehiclePose) {
             pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0 });
         }
@@ -450,7 +450,7 @@
         });
 
         // 2. The line's path points are also directly from the GeoPath message.
-        let linePoints = canonicalPath.map(p => ({ lat: parseFloat(p.lat), lon: parseFloat(p.lon), alt: parseFloat(p.alt) }));
+        let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge }));
 
         // 3. Set the data for the line layer on the map.
         const lineCoords = linePoints.map(p => [p.lon, p.lat]);

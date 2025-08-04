@@ -14,17 +14,22 @@ Add Waypoint
 
             <div class="form-group mb-3">
                 {{ form.lat.label(class="form-control-label") }}
-                {{ form.lat(class="form-control bg-dark text-white", placeholder="Latitude (e.g., 34.0522)") }}
+                {{ form.lat(class="form-control bg-dark text-white", placeholder="Latitude (e.g., 40.123456)") }}
             </div>
 
             <div class="form-group mb-3">
                 {{ form.lon.label(class="form-control-label") }}
-                {{ form.lon(class="form-control bg-dark text-white", placeholder="Longitude (e.g., -118.2437)") }}
+                {{ form.lon(class="form-control bg-dark text-white", placeholder="Longitude (e.g., -70.123456)") }}
             </div>
 
             <div class="form-group mb-3">
                 {{ form.alt.label(class="form-control-label") }}
-                {{ form.alt(class="form-control bg-dark text-white", placeholder="Altitude (e.g., 10.0)") }}
+                {{ form.alt(class="form-control bg-dark text-white", placeholder="Altitude (e.g., 2.0)") }}
+            </div>
+
+            <div class="form-group mb-3">
+                {{ form.surge.label(class="form-control-label", "Surge Velocity [m/s]") }}
+                {{ form.surge(class="form-control bg-dark text-white", placeholder="Surge Velocity (e.g., 0.5)") }}
             </div>
 
             {{ form.submit(class="btn btn-primary") }}

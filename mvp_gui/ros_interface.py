@@ -186,7 +186,10 @@ class RosInterfaceNode(Node):
         path_data = []
         for pose_stamped in msg.poses:
             pos = pose_stamped.pose.position
-            path_data.append({'lat': pos.latitude, 'lon': pos.longitude, 'alt': pos.altitude})
+            # The GeoPath message does not contain surge/velocity information.
+            # We add a default 'surge' field to maintain a consistent data structure
+            # for the frontend and prevent errors.
+            path_data.append({'lat': pos.latitude, 'lon': pos.longitude, 'alt': pos.altitude, 'surge': 0.0})
         self.sio.emit('published_path_update', path_data)
 
     def roslaunch_state_callback(self, msg):
@@ -211,6 +214,9 @@ class RosInterfaceNode(Node):
     def controller_state_callback(self, msg):
         if not self.sio.connected: return
         self.sio.emit('controller_state_update', {'state': msg.data})
+    
+    def _convert_rad_to_deg(self, angle):
+        return angle * 180.0 / np.pi
 
     # --- NEW: Callback for synchronized pose messages ---
     def synchronized_pose_callback(self, odom_msg, geo_pose_msg):
@@ -236,9 +242,9 @@ class RosInterfaceNode(Node):
             "lat": geo_pose_msg.pose.position.latitude,
             "lon": geo_pose_msg.pose.position.longitude,
             "alt": geo_pose_msg.pose.position.altitude,
-            "roll": euler_angles[0] * 180 / np.pi,
-            "pitch": euler_angles[1] * 180 / np.pi,
-            "yaw": euler_angles[2] * 180 / np.pi,
+            "roll": self._convert_rad_to_deg(euler_angles[0]),
+            "pitch": self._convert_rad_to_deg(euler_angles[1]),
+            "yaw": self._convert_rad_to_deg(euler_angles[2]),
             "frame_id": odom_msg.header.frame_id,
             "child_frame_id": odom_msg.child_frame_id,
             "x": odom_msg.pose.pose.position.x,
@@ -247,9 +253,9 @@ class RosInterfaceNode(Node):
             "u": odom_msg.twist.twist.linear.x,
             "v": odom_msg.twist.twist.linear.y,
             "w": odom_msg.twist.twist.linear.z,
-            "p": odom_msg.twist.twist.angular.x * 180 / np.pi,
-            "q": odom_msg.twist.twist.angular.y * 180 / np.pi,
-            "r": odom_msg.twist.twist.angular.z * 180 / np.pi,
+            "p": self._convert_rad_to_deg(odom_msg.twist.twist.angular.x),
+            "q": self._convert_rad_to_deg(odom_msg.twist.twist.angular.y),
+            "r": self._convert_rad_to_deg(odom_msg.twist.twist.angular.z),
         }
         self.sio.emit('vehicle_pose_update', pose_data)
 
@@ -284,9 +290,8 @@ class RosInterfaceNode(Node):
         req = SendWaypoints.Request(type='geopath')
         for wp_data in waypoints_data:
             wpt = Waypoint()
-            # CORRECTED: The data is already in float format from the web server.
-            # No need for an extra `float()` conversion.
-            wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude = wp_data['lat'], wp_data['lon'], wp_data['alt']
+            # The data is already in float format from the web server
+            wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude, wpt.u = wp_data['lat'], wp_data['lon'], wp_data['alt'], wp_data['surge']
             req.wpt.append(wpt)
         self.pub_waypoints_client.call_async(req)
 

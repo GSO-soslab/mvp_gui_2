@@ -9,7 +9,8 @@ class Waypoint(db.Model):
     # This directly matches the precision from the map and avoids conversion/rounding issues.
     lat = db.Column(db.Float, nullable=False)
     lon = db.Column(db.Float, nullable=False)
-    # Altitude can remain as Numeric since its precision requirements are lower.
-    alt = db.Column(db.Numeric(10, 2), nullable=False)
+    alt = db.Column(db.Float, nullable=False)
+    surge = db.Column(db.Float, nullable=False)
+
     def __repr__(self):
         return f'<Waypoint {self.id}>'

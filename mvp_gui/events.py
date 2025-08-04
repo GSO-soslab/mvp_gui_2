@@ -102,6 +102,6 @@ def handle_publish_waypoints_request():
         waypoints = Waypoint.query.order_by(Waypoint.id).all()
         # CORRECTED: Since lat/lon are stored as Float, no conversion is needed.
         # w.alt is still a Decimal from Numeric, so it needs to be converted to float.
-        waypoints_payload = [{"lat": w.lat, "lon": w.lon, "alt": float(w.alt)} for w in waypoints]
+        waypoints_payload = [{"lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} for w in waypoints]
         # Emit to the room. The ROS node is in the room and will receive this.
         sio_server.emit('ros_action', {'action': 'publish_waypoints', 'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
