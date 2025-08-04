@@ -3,8 +3,8 @@ from wtforms import SubmitField, FloatField
 from wtforms.validators import DataRequired
 
 class WaypointForm(FlaskForm):
-    lat = FloatField(label='latitude', validators=[DataRequired()])
-    lon = FloatField(label='longitude', validators=[DataRequired()])
-    alt = FloatField(label='altitude', validators=[DataRequired()])
-    surge = FloatField(label='surge', validators=[DataRequired()])
+    lat = FloatField(label='Latitude [deg]', validators=[DataRequired()])
+    lon = FloatField(label='Longitude [deg]', validators=[DataRequired()])
+    alt = FloatField(label='Altitude [m]', validators=[DataRequired()])
+    surge = FloatField(label='Surge Velocity [m/s]', validators=[DataRequired()])
     submit = SubmitField('Submit')
