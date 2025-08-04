@@ -9,7 +9,7 @@ import numpy as np
 import yaml
 from nav_msgs.msg import Odometry
 from geographic_msgs.msg import GeoPoseStamped, GeoPath
-from mvp_msgs.msg import Waypoint, ControlProcess, HelmState
+from mvp_msgs.msg import Waypoint, Waypoints, ControlProcess, HelmState
 from std_msgs.msg import Float64, Float32MultiArray, Int16, Bool, Int16MultiArray
 from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
@@ -20,7 +20,7 @@ import logging
 # New import for message synchronization
 import message_filters
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 class RosInterfaceNode(Node):
     def __init__(self, sio_client):
@@ -88,7 +88,7 @@ class RosInterfaceNode(Node):
         self.create_subscription(Bool, self.topic_ns + self.yaml_config.get('controller_state_get', 'controller_state'), self.controller_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('gpio_power_get', 'gpio_power_state'), self.power_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('roslaunch_state_get', 'roslaunch_state'), self.roslaunch_state_callback, 10, callback_group=self.callback_group)
-        self.create_subscription(GeoPath, self.topic_ns + self.yaml_config.get('survey_geopath_source', 'survey/geopath'), self.survey_geopath_callback, 10, callback_group=self.callback_group)
+        self.create_subscription(Waypoints, self.topic_ns + self.yaml_config.get('survey_geopath_source', 'survey/geopath'), self.survey_geopath_callback, 10, callback_group=self.callback_group)
 
         # --- Static Service Clients ---
         self.set_helm_state_client = self.create_client(SetString, self.service_ns + self.yaml_config.get('helm_state_set', 'mvp_helm/change_state'), callback_group=self.callback_group)
@@ -184,12 +184,8 @@ class RosInterfaceNode(Node):
         """Callback for the published geopath. Relays data to the browser."""
         if not self.sio.connected: return
         path_data = []
-        for pose_stamped in msg.poses:
-            pos = pose_stamped.pose.position
-            # The GeoPath message does not contain surge/velocity information.
-            # We add a default 'surge' field to maintain a consistent data structure
-            # for the frontend and prevent errors.
-            path_data.append({'lat': pos.latitude, 'lon': pos.longitude, 'alt': pos.altitude, 'surge': 0.0})
+        for single_wpt in msg.wpt:
+            path_data.append({'lat': single_wpt.ll_wpt.latitude, 'lon': single_wpt.ll_wpt.longitude, 'alt': single_wpt.ll_wpt.altitude, 'surge': single_wpt.u})
         self.sio.emit('published_path_update', path_data)
 
     def roslaunch_state_callback(self, msg):
@@ -285,13 +281,26 @@ class RosInterfaceNode(Node):
         if not self.set_controller_state_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.set_controller_state_client.srv_name}' not available.")
         self.set_controller_state_client.call_async(SetBool.Request(data=bool(value)))
 
+    # def call_publish_waypoints(self, waypoints_data):
+    #     if not self.pub_waypoints_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.pub_waypoints_client.srv_name}' not available.")
+    #     req = SendWaypoints.Request(type='geopath')
+    #     for wp_data in waypoints_data:
+    #         wpt = Waypoint()
+    #         # The data is already in float format from the web server
+    #         wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude, wpt.u = wp_data['lat'], wp_data['lon'], wp_data['alt'], wp_data['surge']
+    #         req.wpt.append(wpt)
+    #     self.pub_waypoints_client.call_async(req)
+
     def call_publish_waypoints(self, waypoints_data):
-        if not self.pub_waypoints_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.pub_waypoints_client.srv_name}' not available.")
-        req = SendWaypoints.Request(type='geopath')
+        if not self.pub_waypoints_client.wait_for_service(timeout_sec=1.0):
+            return self.get_logger().error(f"Service '{self.pub_waypoints_client.srv_name}' not available.")
+        req = SendWaypoints.Request(type='waypoint')
         for wp_data in waypoints_data:
             wpt = Waypoint()
-            # The data is already in float format from the web server
-            wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude, wpt.u = wp_data['lat'], wp_data['lon'], wp_data['alt'], wp_data['surge']
+            wpt.ll_wpt.latitude = wp_data['lat']
+            wpt.ll_wpt.longitude = wp_data['lon']
+            wpt.ll_wpt.altitude = wp_data['alt']
+            wpt.u = wp_data['surge']
             req.wpt.append(wpt)
         self.pub_waypoints_client.call_async(req)
 
