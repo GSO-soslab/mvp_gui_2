@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mvp_gui_2</name>
+  <version>1.0.0</version>
+  <description>A ROS2 package for the MVP GUI, integrating a Flask web server.</description>
+  <maintainer email="user@example.com">Your Name</maintainer>
+  <license>TODO: License declaration</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geographic_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>mvp_msgs</depend>
+
+  <exec_depend>python3-flask</exec_depend>
+  <exec_depend>python3-flask-socketio</exec_depend>
+  <exec_depend>python3-flask-sqlalchemy</exec_depend>
+  <exec_depend>python3-flask-wtf</exec_depend>
+  <exec_depend>python3-socketio</exec_depend>
+  <exec_depend>python3-simple-websocket</exec_depend>
+  <exec_depend>python-engineio</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-pyyaml</exec_depend>
+  <exec_depend>python3-tf-transformations</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

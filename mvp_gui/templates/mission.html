@@ -7,11 +7,11 @@ Mission
 <div class="container-fluid mt-3">
   <h4>Waypoints Manager</h4>
   <div class="mb-3">
-    <form action="{{ url_for('mission_page') }}" method="post" class="d-inline">
+    <form action="{{ url_for('mission_bp.mission_page') }}" method="post" class="d-inline">
       <input type="hidden" name="add" value="add">
       <button type="submit" class="btn btn-primary"> Add a Waypoint </button>
     </form>
-    <form action="{{ url_for('reset_waypoints') }}" method="post" class="d-inline">
+    <form action="{{ url_for('mission_bp.reset_waypoints') }}" method="post" class="d-inline">
       <button type="submit" class="btn btn-danger"
         onclick="return confirm('This will delete all current waypoints and create a new one near the vehicle. Are you sure?');">
         Reset Waypoints </button>

@@ -59,20 +59,20 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mr-auto">
                 <li class="nav-item {% if current_page == 'systems' %}active{% endif %}">
-                    <a class="nav-link" href="{{ url_for('systems_page') }}">Systems & Tools</a>
+                    <a class="nav-link" href="{{ url_for('systems_bp.systems_page') }}">Systems & Tools</a>
                 </li>
                 </li>
                 <li class="nav-item {% if current_page == 'vehicle_status' %}active{% endif %}">
-                    <a class="nav-link" href="{{ url_for('vehicle_status_page') }}">Vehicle Status</a>
+                    <a class="nav-link" href="{{ url_for('base_bp.vehicle_status_page') }}">Vehicle Status</a>
                 </li>
                 <li class="nav-item {% if current_page == 'power_manager' %}active{% endif %}">
-                    <a class="nav-link" href="{{ url_for('power_manager_page') }}">Power Manager</a>
+                    <a class="nav-link" href="{{ url_for('power_manager_bp.power_manager_page') }}">Power Manager</a>
                 </li>
                 <li class="nav-item {% if current_page == 'mission' %}active{% endif %}">
-                    <a class="nav-link" href="{{ url_for('mission_page') }}">Mission</a>
+                    <a class="nav-link" href="{{ url_for('mission_bp.mission_page') }}">Mission</a>
                 </li>
                 <li class="nav-item {% if current_page == 'map' %}active{% endif %}">
-                    <a class="nav-link" href="{{ url_for('map_page') }}">Map</a>
+                    <a class="nav-link" href="{{ url_for('map_bp.map_page') }}">Map</a>
                 </li>
             </ul>
         </div>

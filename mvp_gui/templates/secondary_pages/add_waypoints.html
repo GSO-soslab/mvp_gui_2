@@ -9,7 +9,7 @@ Add Waypoint
         <h1 class="h3 mb-3 font-weight-normal">
             Add a New Waypoint
         </h1>
-        <form method="POST" action="{{ url_for('add_waypoint_page') }}" class="form-register" style="color:white">
+        <form method="POST" action="{{ url_for('mission_bp.add_waypoint_page') }}" class="form-register" style="color:white">
             {{ form.hidden_tag() }}
 
             <div class="form-group mb-3">
@@ -33,7 +33,7 @@ Add Waypoint
             </div>
 
             {{ form.submit(class="btn btn-primary") }}
-            <a href="{{ url_for('mission_page') }}" class="btn btn-secondary">Cancel</a>
+            <a href="{{ url_for('mission_bp.mission_page') }}" class="btn btn-secondary">Cancel</a>
         </form>
     </div>
 </div>

@@ -1,7 +1,7 @@
 from flask import current_app, request
 from flask_socketio import join_room # Import the join_room function
-from mvp_gui import sio_server, db
-from mvp_gui.models import Waypoint
+from .web_utils import sio_server, db
+from .models import Waypoint
 
 # Define a constant for the room name to avoid typos
 BROADCAST_ROOM = 'all_clients_room'

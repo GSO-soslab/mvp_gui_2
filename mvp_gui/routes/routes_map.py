@@ -1,25 +1,21 @@
-from flask import render_template, request, jsonify, redirect, url_for, send_from_directory, Response
-from mvp_gui import app, db, sio_server, yaml_config
-from mvp_gui.models import Waypoint
+# mvp_gui/routes/routes_map.py
+from flask import (render_template, request, jsonify, redirect, url_for, 
+                   send_from_directory, Response, Blueprint, current_app)
+from ..web_utils import db, sio_server
+from ..models import Waypoint
 import os
 import sqlite3
 from werkzeug.exceptions import NotFound
+from ament_index_python.packages import get_package_share_directory
 
+map_bp = Blueprint('map_bp', __name__)
 
-@app.route('/map', methods=['GET', 'POST'])
+@map_bp.route('/map', methods=['GET', 'POST'])
 def map_page():
-    # The host IP is no longer needed; the template will use 
-    # the request context to build full URLs.
-    
-    with app.app_context():
-        # Fetch only persistent data for initial render
+    with current_app.app_context():
         waypoints = Waypoint.query.order_by(Waypoint.id).all()
-        # CORRECTED: Since lat/lon are stored as Float, no conversion is needed.
-        # waypoint.alt is still a Decimal from Numeric, so it needs to be converted to float.
-        waypoints_data = [{"id": waypoint.id, "lat": waypoint.lat, "lon": waypoint.lon, "alt": waypoint.alt, "surge": waypoint.surge} for waypoint in waypoints]
+        waypoints_data = [{"id": w.id, "lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} for w in waypoints]
 
-    # This POST handler is for the legacy form-based buttons.
-    # Modern interaction is handled via direct WebSocket events from the client.
     if request.method == 'POST':
         if 'states' in request.form:
             sio_server.emit('ros_action', {'action': 'change_state', 'value': request.form.get('states')})
@@ -28,26 +24,15 @@ def map_page():
         elif 'controller_enable' in request.form:
             sio_server.emit('ros_action', {'action': 'controller_state', 'value': True})
         elif 'publish_waypoints' in request.form:
-            # This branch is now superseded by the socketio handler, but is kept for compatibility.
             sio_server.emit('publish_waypoints_request')
-        return redirect(url_for('map_page'))
+        return redirect(url_for('map_bp.map_page'))
 
     return render_template("map.html", 
                            items_jsn=waypoints_data, 
-                           # Pass empty or default data for real-time elements
                            vehicle_jsn={"lat": 0, "lon": 0, "yaw": 0, "alt": 0}, 
-                           pose_jsn=[], # History is now managed on the client
-                           topside_jsn={"lat": 0, "lon": 0, "alt": 0},
-                           topsidehistory_jsn=[],
-                           secondary_jsn={"lat": 0, "lon": 0, "alt": 0},
-                           secondaryhistory_jsn=[],
                            current_page="map")
 
-
-# The 'publish_waypoints_request' handler has been moved to mvp_gui/events.py
-
-
-@app.route('/waypoint_drag', methods=['POST'])
+@map_bp.route('/waypoint_drag', methods=['POST'])
 def waypoint_drag():
     data = request.json
     waypoint = Waypoint.query.get(data['id'])
@@ -59,108 +44,38 @@ def waypoint_drag():
         db.session.commit()
     return jsonify({"success": True})
 
-# This route is modified to serve .png raster tiles from an .mbtiles file.
-# It now expects a URL like /tiles/z/x/y.png
-@app.route('/tiles/<int:z>/<int:x>/<int:y>.png')
+@map_bp.route('/tiles/<int:z>/<int:x>/<int:y>.png')
 def serve_tiles(z, x, y):
-    """
-    Serves map tiles (.png raster format) from any .mbtiles files found within the
-    offline storage directory specified in config.yaml. It searches them in
-    alphabetical order.
-    """
-    # Use the path from config.
-    tiles_dir_config = yaml_config.get('tiles_dir_1')
-    if not tiles_dir_config:
-        app.logger.error("'tiles_dir_1' is not defined in config.yaml")
+    pkg_share_dir = get_package_share_directory('mvp_gui_2')
+    # This path is now relative to the package share directory
+    tiles_dir = os.path.join(pkg_share_dir, 'mvp_gui_offline_map')
+
+    if not os.path.isdir(tiles_dir):
+        current_app.logger.error(f"Offline map base directory not found at: {tiles_dir}")
         raise NotFound()
 
-    # Make path absolute. app.root_path is the 'mvp_gui' folder.
-    project_root = os.path.abspath(os.path.join(app.root_path, '..'))
-    tiles_base_dir = os.path.join(project_root, tiles_dir_config)
-
-    if not os.path.isdir(tiles_base_dir):
-        app.logger.error(f"Offline map base directory not found at: {tiles_base_dir}")
-        raise NotFound()
-
-    # Find all .mbtiles files in the directory, sorted alphabetically.
-    mbtiles_files = []
-    try:
-        for filename in sorted(os.listdir(tiles_base_dir)):
-            if filename.endswith(".mbtiles"):
-                mbtiles_files.append(os.path.join(tiles_base_dir, filename))
-    except FileNotFoundError:
-        app.logger.error(f"Offline map base directory could not be read: {tiles_base_dir}")
-        raise NotFound()
-
+    mbtiles_files = [os.path.join(tiles_dir, f) for f in sorted(os.listdir(tiles_dir)) if f.endswith(".mbtiles")]
     if not mbtiles_files:
-        app.logger.error(f"No .mbtiles files found in directory: {tiles_base_dir}")
+        current_app.logger.error(f"No .mbtiles files found in directory: {tiles_dir}")
         raise NotFound()
 
-    # MBTiles use TMS tile scheme (flipped Y). XYZ scheme used by map clients needs conversion.
     y_flipped = (2**z) - 1 - y
 
-    # Iterate through each mbtiles file and try to find the tile.
     for mbtiles_file_path in mbtiles_files:
         tile_data = None
         try:
-            # Connect to the SQLite database (.mbtiles file) in read-only mode.
             con = sqlite3.connect(f"file:{mbtiles_file_path}?mode=ro", uri=True)
             cur = con.cursor()
-            cur.execute(
-                "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
-                (z, x, y_flipped)
-            )
+            cur.execute("SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?", (z, x, y_flipped))
             result = cur.fetchone()
-            if result:
-                tile_data = result[0]
+            if result: tile_data = result[0]
             con.close()
         except sqlite3.Error as e:
-            app.logger.error(f"Database error while accessing {mbtiles_file_path}: {e}")
-            # If one file is corrupt or has an issue, log it and continue to the next one.
+            current_app.logger.error(f"Database error while accessing {mbtiles_file_path}: {e}")
             continue
 
         if tile_data:
-            # Tile found, return it immediately.
             return Response(tile_data, mimetype='image/png')
 
-    # If we get here, the tile was not found in any of the mbtiles files.
-    # Map libraries handle 404s gracefully.
-    app.logger.warning(f"Tile not found for z={z}, x={x}, y={y} in any mbtiles file in {tiles_base_dir}")
+    current_app.logger.warning(f"Tile not found for z={z}, x={x}, y={y} in {tiles_dir}")
     raise NotFound()
-
-
-@app.route('/fonts/<fontstack>/<font_range>.pbf')
-def serve_fonts(fontstack, font_range):
-    """
-    Serves font glyphs (.pbf format) for the offline map.
-    This is used for vector tiles and is unlikely to be called for raster maps.
-    """
-    tiles_dir_config = yaml_config.get('tiles_dir_1')
-    if not tiles_dir_config:
-        app.logger.error("'tiles_dir_1' is not defined in config.yaml")
-        raise NotFound()
-
-    project_root = os.path.abspath(os.path.join(app.root_path, '..'))
-    fonts_base_dir = os.path.join(project_root, tiles_dir_config, 'fonts')
-    font_stack_dir = os.path.join(fonts_base_dir, fontstack)
-    font_filename = f"{font_range}.pbf"
-
-    # Security check: ensure fontstack doesn't contain '..' to prevent path traversal
-    if '..' in fontstack or not os.path.isdir(font_stack_dir):
-        app.logger.warning(f"Font stack not found or invalid path: {font_stack_dir}")
-        raise NotFound()
-
-    if os.path.exists(os.path.join(font_stack_dir, font_filename)):
-        return send_from_directory(font_stack_dir, font_filename, mimetype='application/x-protobuf')
-        
-    raise NotFound()
-
-
-@app.route('/map_page_assets/<path:filename>')
-def serve_map_page_assets(filename):
-    """
-    Serves CSS and JS files specifically for the map page from the templates/map_page directory.
-    This is a non-standard approach to fulfill the user request.
-    """
-    assets_dir = os.path.join(app.root_path, 'templates', 'map_page')
-    return send_from_directory(assets_dir, filename)

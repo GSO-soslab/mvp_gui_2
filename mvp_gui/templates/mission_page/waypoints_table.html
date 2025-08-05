@@ -22,19 +22,19 @@
                 <td>{{ item.alt }}</td>
                 <td>{{ item.surge}}</td>
                 <td>
-                    <form action="/mission" method="post" style="margin: 0;">
+                    <form action="{{ url_for('mission_bp.mission_page') }}" method="post" style="margin: 0;">
                         <input type="hidden" name="edit" value="{{ item.id }}">
                         <button type="submit" class="btn btn-sm btn-secondary"> Edit </button>
                     </form>
                 </td>
                 <td>
-                    <form action="/mission" method="post" style="margin: 0;">
+                    <form action="{{ url_for('mission_bp.mission_page') }}" method="post" style="margin: 0;">
                         <input type="hidden" name="copy" value="{{ item.id }}">
                         <button type="submit" class="btn btn-sm btn-info"> Copy </button>
                     </form>
                 </td>
                 <td>
-                    <form action="/mission" method="post" style="margin: 0;">
+                    <form action="{{ url_for('mission_bp.mission_page') }}" method="post" style="margin: 0;">
                         <input type="hidden" name="delete" value="{{ item.id }}">
                         <button type="submit" class="btn btn-sm btn-danger"> Delete </button>
                     </form>

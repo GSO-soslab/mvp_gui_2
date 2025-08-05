@@ -1,24 +1,5 @@
-<h4> MVP GUI ROS NODE Manager</h4>
-<p style="color: lightskyblue;"> MVP GUI ROS Node status: <span id="mvpgui_status">{{ mvpgui_status }}</span> </p>
-<table class="table table-hover table-dark">
-    <tbody>
-        <tr>
-            <td>
-                <!-- Replaced form with a button that triggers a JavaScript function -->
-                <button id="mvpgui_start_btn" type="button" onclick="handleNodeAction('start')"
-                    class="btn btn-success">Start MVP GUI ROS Node</button>
-            </td>
-            <td>
-                <!-- Replaced form with a button that triggers a JavaScript function -->
-                <button id="mvpgui_stop_btn" type="button" onclick="handleNodeAction('stop')"
-                    class="btn btn-danger">Stop MVP GUI ROS Node</button>
-            </td>
-        </tr>
-    </tbody>
-</table>
-<br>
-
 <h4>ROS Launch Control</h4>
+<p style="color: lightskyblue;">Use these buttons to launch or terminate external ROS launch files managed by the C2 Commander.</p>
 <table class="table table-hover table-dark">
     <thead>
         <tr>
@@ -27,19 +8,25 @@
         </tr>
     </thead>
     <tbody>
-        {% for launch_key in launch_files %}
-        <tr>
-            <td>{{ launch_key }}</td>
-            <td>
-                <button class="btn btn-success btn-sm" onclick="launchFile('{{ launch_key }}', true)">
-                    Launch
-                </button>
-                <button class="btn btn-danger btn-sm" onclick="launchFile('{{ launch_key }}', false)">
-                    Terminate
-                </button>
-            </td>
-        </tr>
-        {% endfor %}
+        {% if launch_files %}
+            {% for launch_key in launch_files %}
+            <tr>
+                <td>{{ launch_key }}</td>
+                <td>
+                    <button class="btn btn-success btn-sm" onclick="launchFile('{{ launch_key }}', true)">
+                        Launch
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="launchFile('{{ launch_key }}', false)">
+                        Terminate
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch files from ROS node...</td>
+            </tr>
+        {% endif %}
     </tbody>
 </table>
 <br>
@@ -53,52 +40,26 @@
         </tr>
     </thead>
     <tbody>
-        {% for launch_key in launch_files %}
-        <tr>
-            <td>{{ launch_key }}</td>
-            <!-- Use replace filter to create a valid DOM ID -->
-            <td id="status-{{ launch_key | replace('/', '-') }}">Unknown</td>
-        </tr>
-        {% endfor %}
+        {% if launch_files %}
+            {% for launch_key in launch_files %}
+            <tr>
+                <td>{{ launch_key }}</td>
+                <!-- Use replace filter to create a valid DOM ID -->
+                <td id="status-{{ launch_key | replace('/', '-') }}">Unknown</td>
+            </tr>
+            {% endfor %}
+        {% else %}
+             <tr>
+                <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch status from ROS node...</td>
+            </tr>
+        {% endif %}
     </tbody>
 </table>
 
 
 <script>
-    // This function is called when the Start or Stop buttons are clicked.
-    // It sends an AJAX request to the server and then refreshes the page after 3 seconds.
-    function handleNodeAction(action) {
-        // Disable both buttons to prevent multiple clicks
-        document.getElementById('mvpgui_start_btn').disabled = true;
-        document.getElementById('mvpgui_stop_btn').disabled = true;
-
-        const formData = new FormData();
-        if (action === 'start') {
-            formData.append('mvpgui_start', '');
-        } else {
-            formData.append('mvpgui_stop', '');
-        }
-
-        fetch('/', {
-            method: 'POST',
-            body: formData
-        })
-            .catch(error => {
-                console.error('Error sending action request:', error);
-            })
-            .finally(() => {
-                // After the request is sent, wait 3 seconds then reload the page.
-                console.log(`Action '${action}' sent. Refreshing in 3 seconds...`);
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
-            });
-    }
-
     document.addEventListener('DOMContentLoaded', function () {
-        // This code runs only after the page is fully loaded
-
-        // --- Launch Control (can stay outside as it's user-triggered) ---
+        // --- Launch Control ---
         window.launchFile = function (launchKey, status) {
             console.log(`Requesting to ${status ? 'launch' : 'terminate'}: ${launchKey}`);
             socket.emit('ros_action', {
@@ -132,55 +93,5 @@
                 }
             });
         });
-
-
-        // --- Local Node Manager Status Polling ---
-        let intervalId_system_status = null;
-        const updateInterval_system_status = 1000;
-
-        function updatessTables() {
-            fetch('/current_system_status')
-                .then(response => response.json())
-                .then(data => {
-                    const { mvpgui_status } = data;
-                    const statusElement = document.getElementById('mvpgui_status');
-                    if (statusElement) {
-                        statusElement.textContent = mvpgui_status.data;
-                    }
-                })
-                .catch(error => {
-                    console.error("Error fetching system status:", error);
-                    const statusElement = document.getElementById('mvpgui_status');
-                    if (statusElement) {
-                        statusElement.textContent = "Error";
-                    }
-                });
-        }
-
-        function startssInterval() {
-            if (intervalId_system_status === null) {
-                updatessTables();
-                intervalId_system_status = setInterval(updatessTables, updateInterval_system_status);
-            }
-        }
-
-        function stopssInterval() {
-            if (intervalId_system_status !== null) {
-                clearInterval(intervalId_system_status);
-                intervalId_system_status = null;
-            }
-        }
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                startssInterval();
-            } else {
-                stopssInterval();
-            }
-        });
-
-        if (document.visibilityState === 'visible') {
-            startssInterval();
-        }
     });
 </script>
