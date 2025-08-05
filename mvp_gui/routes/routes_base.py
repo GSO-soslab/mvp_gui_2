@@ -20,6 +20,7 @@ def inject_load():
         # We pass empty placeholders or initial values.
         initial_data = {
             'vitals': {'voltage': 0, 'current': 0},
+            'computer_info': {'cpu_temp': 0, 'cpu_usage': 0, 'mem_usage': 0},
             'poses': {'lat': 0, 'lon': 0, 'yaw': 0, 'z': 0},
             'items': [], # Power items are now real-time
             'waypoints': waypoints,

@@ -13,6 +13,9 @@ helm_state_get: helm/state
 controller_state_get: controller_state
 gpio_power_get: gpio_power_state
 roslaunch_state_get: roslaunch_state
+## Info
+computer_info_source: computer_info
+power_info_source: power_info
 
 #----------------------------
 # Services

@@ -47,6 +47,16 @@ def handle_power_update(data):
     """Relay power status from ROS node to all browser clients in the room."""
     sio_server.emit('power_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
+@sio_server.on('power_info_update')
+def handle_power_info_update(data):
+    """Relay power status from ROS node to all browser clients in the room."""
+    sio_server.emit('power_info_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('computer_info_update')
+def handle_computer_info_update(data):
+    """Relay power status from ROS node to all browser clients in the room."""
+    sio_server.emit('computer_info_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
 @sio_server.on('helm_state_update')
 def handle_helm_state_update(data):
     """Relay helm state from ROS node to all browser clients in the room."""

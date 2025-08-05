@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import SingleThreadedExecutor, MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 import socketio as sio_client_lib # Use the full library name for clarity
 import time
@@ -64,8 +64,6 @@ class RosInterfaceNode(Node):
         
         # --- Synchronized Pose Subscribers ---
         # Using message_filters to synchronize Odometry and GeoPoseStamped messages
-        # based on their timestamps. This is more robust than storing the last
-        # message of each type and calling a publisher from both callbacks.
         odom_topic = self.topic_ns + self.yaml_config.get('poses_source', 'odometry')
         geopose_topic = self.topic_ns + self.yaml_config.get('geo_pose_source', 'geopose')
 
@@ -84,6 +82,8 @@ class RosInterfaceNode(Node):
         self.get_logger().info(f"Synchronizing pose on odom topic '{odom_topic}' and geopose topic '{geopose_topic}'.")
         
         # --- Other Subscribers ---
+        self.create_subscription(Float32MultiArray, self.topic_ns + self.yaml_config.get('power_info_source', 'power_info'), self.power_info_callback, 10, callback_group=self.callback_group)
+        self.create_subscription(Float32MultiArray, self.topic_ns + self.yaml_config.get('computer_info_source', 'computer_info'), self.computer_info_callback, 10, callback_group=self.callback_group)
         self.create_subscription(HelmState, self.topic_ns + self.yaml_config.get('helm_state_get', 'helm/state'), self.helm_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Bool, self.topic_ns + self.yaml_config.get('controller_state_get', 'controller_state'), self.controller_state_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Int16MultiArray, self.topic_ns + self.yaml_config.get('gpio_power_get', 'gpio_power_state'), self.power_callback, 10, callback_group=self.callback_group)
@@ -173,23 +173,30 @@ class RosInterfaceNode(Node):
         def handle_ros_action(data):
             action = data.get('action')
             self.get_logger().info(f"Received forwarded GUI action '{action}', data: {data}")
-            if action == 'change_state': self.call_set_helm_state(data.get('value'))
-            elif action == 'controller_state': self.call_set_controller_state(data.get('value'))
-            elif action == 'publish_waypoints': self.call_publish_waypoints(data.get('waypoints'))
-            elif action == 'set_power': self.call_set_power(data.get('name'), data.get('status'))
-            elif action == 'launch_file': self.call_launch_file(data.get('key'), data.get('status'))
+            if action == 'change_state': 
+                self.call_set_helm_state(data.get('value'))
+            elif action == 'controller_state': 
+                self.call_set_controller_state(data.get('value'))
+            elif action == 'publish_waypoints': 
+                self.call_publish_waypoints(data.get('waypoints'))
+            elif action == 'set_power': 
+                self.call_set_power(data.get('name'), data.get('status'))
+            elif action == 'launch_file': 
+                self.call_launch_file(data.get('key'), data.get('status'))
 
     # --- Methods to emit status updates TO the server ---
     def survey_geopath_callback(self, msg):
         """Callback for the published geopath. Relays data to the browser."""
-        if not self.sio.connected: return
+        if not self.sio.connected:
+            return
         path_data = []
         for single_wpt in msg.wpt:
             path_data.append({'lat': single_wpt.ll_wpt.latitude, 'lon': single_wpt.ll_wpt.longitude, 'alt': single_wpt.ll_wpt.altitude, 'surge': single_wpt.u})
         self.sio.emit('published_path_update', path_data)
 
     def roslaunch_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected:
+            return
         statuses = list(msg.data)
         if len(statuses) != len(self.launch_keys):
             self.get_logger().warning(f"Launch status array size ({len(statuses)}) does not match number of launch files ({len(self.launch_keys)}).")
@@ -197,22 +204,40 @@ class RosInterfaceNode(Node):
         self.sio.emit('launch_status_update', {'keys': self.launch_keys, 'statuses': statuses})
 
     def power_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected:
+            return
         statuses = list(msg.data)
         power_data = {'keys': self.gpio_device_keys,  'statuses': statuses}
-
         self.sio.emit('power_update', power_data)
 
+    def power_info_callback(self, msg):
+        if not self.sio.connected:
+            return
+        power_info = {'voltage': msg.data[0], 'current': msg.data[1]}
+        self.sio.emit('power_info_update', power_info)
+
+    def computer_info_callback(self, msg):
+        if not self.sio.connected:
+            return
+        computer_info = {'mem_usage': msg.data[0], 'cpu_temp': msg.data[1], 'cpu_usage': msg.data[2]}
+        self.sio.emit('computer_info_update', computer_info)
+
     def helm_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected:
+            return
         self.sio.emit('helm_state_update', {'current_state': msg.name, 'transitions': msg.transitions})
 
     def controller_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected:
+            return
         self.sio.emit('controller_state_update', {'state': msg.data})
     
     def _convert_rad_to_deg(self, angle):
         return angle * 180.0 / np.pi
+    
+    def _check_for_service(self, client, timeout_sec=1.0):
+        if not client.wait_for_service(timeout_sec=timeout_sec): 
+            return self.get_logger().error(f"Launch service '{client.srv_name}' not available.")
 
     # --- NEW: Callback for synchronized pose messages ---
     def synchronized_pose_callback(self, odom_msg, geo_pose_msg):
@@ -224,9 +249,6 @@ class RosInterfaceNode(Node):
         """
         if not self.sio.connected:
             return
-
-        # The synchronizer ensures we have a matched pair of odom_msg and geo_pose_msg.
-        # We can now combine and emit them without checking for existence or time diff.
         quad = [
             geo_pose_msg.pose.orientation.x,
             geo_pose_msg.pose.orientation.y,
@@ -258,8 +280,11 @@ class RosInterfaceNode(Node):
     # --- Methods to call ROS services ---
     def call_launch_file(self, launch_key, status):
         client = self.launch_clients.get(launch_key)
-        if client is None: return self.get_logger().error(f"No launch service client for '{launch_key}'.")
-        if not client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Launch service '{client.srv_name}' not available.")
+        if client is None: 
+            return self.get_logger().error(f"No launch service client for '{launch_key}'.")
+        # if not client.wait_for_service(timeout_sec=1.0): 
+        #     return self.get_logger().error(f"Launch service '{client.srv_name}' not available.")
+        self._check_for_service(client)
         req = SetBool.Request()
         req.data = bool(status)
         self.get_logger().info(f"Calling launch service for '{launch_key}' with status: {status}")
@@ -268,32 +293,26 @@ class RosInterfaceNode(Node):
     def call_set_power(self, name, status):
         client = self.power_clients.get(name)
         if client is None: return self.get_logger().error(f"No power service client for '{name}'.")
-        if not client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{client.srv_name}' not available.")
+        self._check_for_service(client)
         req = SetBool.Request()
         req.data = bool(status)
         client.call_async(req)
 
     def call_set_helm_state(self, state_name):
-        if not self.set_helm_state_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.set_helm_state_client.srv_name}' not available.")
+        # if not self.set_helm_state_client.wait_for_service(timeout_sec=1.0): 
+        #     return self.get_logger().error(f"Service '{self.set_helm_state_client.srv_name}' not available.")
+        self._check_for_service(self.set_helm_state_client)
         self.set_helm_state_client.call_async(SetString.Request(data=state_name))
 
     def call_set_controller_state(self, value):
-        if not self.set_controller_state_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.set_controller_state_client.srv_name}' not available.")
+        # if not self.set_controller_state_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.set_controller_state_client.srv_name}' not available.")
+        self._check_for_service(self.set_controller_state_client)
         self.set_controller_state_client.call_async(SetBool.Request(data=bool(value)))
 
-    # def call_publish_waypoints(self, waypoints_data):
-    #     if not self.pub_waypoints_client.wait_for_service(timeout_sec=1.0): return self.get_logger().error(f"Service '{self.pub_waypoints_client.srv_name}' not available.")
-    #     req = SendWaypoints.Request(type='geopath')
-    #     for wp_data in waypoints_data:
-    #         wpt = Waypoint()
-    #         # The data is already in float format from the web server
-    #         wpt.ll_wpt.latitude, wpt.ll_wpt.longitude, wpt.ll_wpt.altitude, wpt.u = wp_data['lat'], wp_data['lon'], wp_data['alt'], wp_data['surge']
-    #         req.wpt.append(wpt)
-    #     self.pub_waypoints_client.call_async(req)
-
     def call_publish_waypoints(self, waypoints_data):
-        if not self.pub_waypoints_client.wait_for_service(timeout_sec=1.0):
-            return self.get_logger().error(f"Service '{self.pub_waypoints_client.srv_name}' not available.")
+        # if not self.pub_waypoints_client.wait_for_service(timeout_sec=1.0):
+        #     return self.get_logger().error(f"Service '{self.pub_waypoints_client.srv_name}' not available.")
+        self._check_for_service(self.pub_waypoints_client)
         req = SendWaypoints.Request(type='waypoint')
         for wp_data in waypoints_data:
             wpt = Waypoint()
@@ -307,15 +326,12 @@ class RosInterfaceNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     sio = sio_client_lib.Client(logger=False, engineio_logger=False)
-    
     @sio.event
     def connect():
         print("ROS Interface connected successfully to WebSocket server.")
-
     @sio.event
     def connect_error(data):
         print(f"Connection failed: {data}")
-
     @sio.event
     def disconnect():
         print("ROS Interface disconnected from WebSocket server.")

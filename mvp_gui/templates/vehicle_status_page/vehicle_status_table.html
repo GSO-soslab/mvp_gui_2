@@ -1,4 +1,4 @@
-<h4>Vehicle Power status</h4>
+<h4>Vehicle Power Status</h4>
 <table class="table table-hover table-dark table-bordered">
     <thead>
         <tr>
@@ -10,6 +10,26 @@
         <tr>
             <td id="voltage">N/A</td>
             <td id="current">N/A</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Vehicle Computer Status</h4>
+<table class="table table-hover table-dark table-bordered">
+    <thead>
+        <tr>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">CPU Temperature [C]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">CPU Usage [%]</th>
+            <th scope="col" bgcolor="rgba(255, 255, 0)">Memory Usage [%]</th>
+
+        </tr>
+    </thead>
+    <tbody id="vital-data">
+        <tr>
+            <td id="cpu_temp">N/A</td>
+            <td id="cpu_usage">N/A</td>
+            <td id="mem_usage">N/A</td>
+
         </tr>
     </tbody>
 </table>
@@ -88,11 +108,19 @@
     document.addEventListener('DOMContentLoaded', function () {
         // This code runs only after the page is fully loaded
 
-        // Listen for 'power_update' event to update vitals
-        socket.on('power_update', function (data) {
+        // Listen for 'power_info_update' event to update vitals
+        socket.on('power_info_update', function (data) {
             console.log('Power update received:', data);
             document.getElementById('voltage').textContent = data.voltage.toFixed(2);
             document.getElementById('current').textContent = data.current.toFixed(2);
+        });
+
+        // Listen for 'computer_info_update' event to update computer info
+        socket.on('computer_info_update', function (data) {
+            console.log('Computer info update received:', data);
+            document.getElementById('cpu_temp').textContent = data.cpu_temp.toFixed(0);
+            document.getElementById('cpu_usage').textContent = data.cpu_usage.toFixed(0);
+            document.getElementById('mem_usage').textContent = data.mem_usage.toFixed(0);
         });
 
         // Listen for 'vehicle_pose_update' event from the server
@@ -109,17 +137,17 @@
             document.getElementById('x').textContent = data.x.toFixed(2);
             document.getElementById('y').textContent = data.y.toFixed(2);
             document.getElementById('z').textContent = data.z.toFixed(2);
-            document.getElementById('roll').textContent = data.roll.toFixed(2);
-            document.getElementById('pitch').textContent = data.pitch.toFixed(2);
-            document.getElementById('yaw').textContent = data.yaw.toFixed(2);
+            document.getElementById('roll').textContent = data.roll.toFixed(1);
+            document.getElementById('pitch').textContent = data.pitch.toFixed(1);
+            document.getElementById('yaw').textContent = data.yaw.toFixed(1);
 
             // Populate twist data
             document.getElementById('u').textContent = data.u.toFixed(2);
             document.getElementById('v').textContent = data.v.toFixed(2);
             document.getElementById('w').textContent = data.w.toFixed(2);
-            document.getElementById('p').textContent = data.p.toFixed(2);
-            document.getElementById('q').textContent = data.q.toFixed(2);
-            document.getElementById('r').textContent = data.r.toFixed(2);
+            document.getElementById('p').textContent = data.p.toFixed(1);
+            document.getElementById('q').textContent = data.q.toFixed(1);
+            document.getElementById('r').textContent = data.r.toFixed(1);
         });
     });
 </script>
