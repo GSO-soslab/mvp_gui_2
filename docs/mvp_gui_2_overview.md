@@ -195,15 +195,12 @@ The interface provides controls for:
 
 ```mermaid
 sequenceDiagram
-    <!-- participant L as ROS2 Launch -->
     participant B as Web Browser (Client)
     participant FN as Flask Node (Server)
     participant RIN as ROS Interface Node (Client)
     participant RS as ROS2 System (MVP C2)
 
-    <!-- L->>FN: Start Node -->
     FN->>FN: Initialize Flask/SocketIO Server
-    <!-- L->>RIN: Start Node (after delay) -->
     RIN->>FN: Connect via WebSocket
     FN->>FN: Add RIN to broadcast room
     
