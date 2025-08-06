@@ -338,7 +338,7 @@ This approach aligns with ROS 2 best practices, where different functionalities 
 2.  Install dependencies:
     - via `rosdep`:
         ```bash
-        rosdep install --from-paths src --ignore-src --rosdistro ${ROS_DISTRO} -y
+        rosdep install --from-paths src --ignore-src -r -y
         ```
     - manually:
         ```bash
