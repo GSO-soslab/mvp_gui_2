@@ -32,7 +32,7 @@ def handle_disconnect():
     # The client is automatically removed from rooms on disconnect.
     print(f'Client disconnected: {request.sid}')
 
-# --- Handlers for events FROM ros_interface.py, relayed TO browsers ---
+# --- Handlers for events FROM ros interface node, relayed TO broadcast room(flask node / browser) ---
 # We now emit to the room instead of using `broadcast=True`.
 
 @sio_server.on('vehicle_pose_update')

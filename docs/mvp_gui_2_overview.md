@@ -195,7 +195,7 @@ The interface provides controls for:
 
 ```mermaid
 sequenceDiagram
-    participant B as Web Browser
+    participant B as Web Browser (Client)
     participant FN as Flask Node
     participant RIN as ROS Interface Node
     participant RS as ROS2 System (MVP C2)
@@ -211,14 +211,15 @@ sequenceDiagram
 
     RIN->>RS: Subscribe to ROS Topics
     RS-->>RIN: Publish Data to ROS Topics
-    RIN->>FN: emit('topic_update', data)
-    FN->>B: emit('topic_update', data)
-    B->>B: Update UI
 
     B->>FN: emit('ros_action', command)
     FN->>RIN: emit('ros_action', command)
     RIN->>RS: Call ROS Services
     RS-->>RIN: ROS Services Response
+
+    RIN->>FN: emit('topic / status update', data)
+    FN->>B: emit('topic / status update', data)
+    B->>B: Update UI
 ```
 
 ## Configuration System
