@@ -195,29 +195,30 @@ The interface provides controls for:
 
 ```mermaid
 sequenceDiagram
-    participant B as Web Browser (Client)
-    participant FN as Flask Node (Server)
-    participant RIN as ROS Interface Node (Client)
+    participant B as Web Browser
+    participant FN as Flask Node
+    participant RIN as ROS Interface Node
     participant RS as ROS2 System (MVP C2)
 
     FN->>FN: Initialize Flask/SocketIO Server
     RIN->>FN: Connect via WebSocket
-    FN->>FN: Add RIN to broadcast room
+    FN->>FN: Add ROS Interface Node to broadcast room
     
     B->>FN: HTTP Request for page
     FN-->>B: Serve HTML/CSS/JS
     B->>FN: Connect via WebSocket
     FN->>FN: Add Browser to broadcast room
 
-    RS-->>RIN: Publish Data (ROS Topic)
+    RIN->>RS: Subscribe to ROS Topics
+    RS-->>RIN: Publish Data to ROS Topics
     RIN->>FN: emit('topic_update', data)
     FN->>B: emit('topic_update', data)
     B->>B: Update UI
 
     B->>FN: emit('ros_action', command)
     FN->>RIN: emit('ros_action', command)
-    RIN->>RS: Call Service (ROS Service)
-    RS-->>RIN: Service Response
+    RIN->>RS: Call ROS Services
+    RS-->>RIN: ROS Services Response
 ```
 
 ## Configuration System
@@ -311,7 +312,7 @@ This approach aligns with ROS 2 best practices, where different functionalities 
 
 ### Prerequisites
 
-1. ROS 2 installation (Jazzy recommended).
+1. ROS 2 installation (tested on Jazzy).
 2. System and Python dependencies. These can be installed using `rosdep` or manually. For a manual setup (e.g., on Debian/Ubuntu):
    ```bash
    sudo apt update
@@ -334,13 +335,28 @@ This approach aligns with ROS 2 best practices, where different functionalities 
 
 1.  Clone the repository into your ROS 2 workspace's `src` directory.
 2.  Install dependencies:
-    ```bash
-    cd /path/to/your/ros2_ws
-    rosdep install --from-paths src -y --ignore-src
-    ```
+    - via `rosdep`:
+        ```bash
+        rosdep install --from-paths src --ignore-src --rosdistro ${ROS_DISTRO} -y
+        ```
+    - manually:
+        ```bash
+        sudo apt update
+        sudo apt install ros-${ROS_DISTRO}-geographic-msgs \
+            ros-${ROS_DISTRO}-tf-transformations \
+            python3-flask \
+            python3-flask-socketio \
+            python3-flask-sqlalchemy \
+            python3-flask-wtf \
+            python3-socketio \
+            python3-simple-websocket \
+            python-engineio \
+            python3-numpy \
+            python3-pyyaml
+        ```
+
 3.  Clone required dependency repositories (if not available via `rosdep`), e.g.:
     ```bash
-    cd /path/to/your/ros2_ws/src
     git clone https://github.com/uri-ocean-robotics/mvp_msgs.git
     ```
 4.  Initialize submodules to get offline map data:
@@ -350,15 +366,14 @@ This approach aligns with ROS 2 best practices, where different functionalities 
     ```
 5.  Build the workspace:
     ```bash
-    cd /path/to/your/ros2_ws
-    colcon build --symlink-install
+    colcon build
     ```
 
 ### Configuration
 
-1.  Modify `install/mvp_gui_2/share/mvp_gui_2/config/mvp_gui_params.yaml` to match your ROS 2 setup.
+1.  Parameters can be set in `config/mvp_gui_params.yaml`
 2.  Ensure topic and service names match your ROS 2 system.
-3.  Configure the `c2_commander_node` name if you use dynamic configuration.
+3.  Build the workspace
 
 ### Running the Application
 
