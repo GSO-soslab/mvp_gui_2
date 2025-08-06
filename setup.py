@@ -60,7 +60,6 @@ setup(
         'python-engineio',
         'numpy',
         'PyYAML',
-        'tf-transformations'
     ],
     zip_safe=True,
     maintainer='Your Name',

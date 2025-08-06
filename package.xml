@@ -14,6 +14,7 @@
   <depend>std_srvs</depend>
   <depend>rcl_interfaces</depend>
   <depend>mvp_msgs</depend>
+  <depend>tf-transformations</depend>
 
   <exec_depend>python3-flask</exec_depend>
   <exec_depend>python3-flask-socketio</exec_depend>
@@ -24,7 +25,6 @@
   <exec_depend>python-engineio</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-pyyaml</exec_depend>
-  <exec_depend>python3-tf-transformations</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 
