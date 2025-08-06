@@ -346,6 +346,8 @@ This approach aligns with ROS 2 best practices, where different functionalities 
             python3-flask-sqlalchemy \
             python3-socketio \
             python3-numpy \
+        
+        pip install Flask-WTF (pip install Flask-WTF --break-system-packages)
         ```
 
 3.  Clone required dependency repositories (if not available via `rosdep`), e.g.:
@@ -395,5 +397,8 @@ This approach aligns with ROS 2 best practices, where different functionalities 
 3.  Control individual power systems from the Power Manager page.
 4.  Manage ROS launch files from the Systems page.
 5.  Publish waypoints for navigation missions from the Map or Mission page.
+
+## Additional Documentation
+Detailed Overview of the pacakge can be found in [docs/mvp_gui_2_overview](docs/mvp_gui_2_overview.md)
 
 This documentation provides a comprehensive overview of the MVP GUI 2 system, its components, and how to use it effectively for monitoring and controlling ROS 2 based autonomous vehicles.

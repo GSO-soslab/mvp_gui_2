@@ -22,6 +22,8 @@ MVP GUI 2 is a comprehensive web-based graphical user interface designed for mon
             python3-flask-sqlalchemy \
             python3-socketio \
             python3-numpy \
+        
+        pip install Flask-WTF (pip install Flask-WTF --break-system-packages)
         ```
 
 3.  Clone required dependency repositories (if not available via `rosdep`), e.g.:
