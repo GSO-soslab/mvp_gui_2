@@ -322,12 +322,8 @@ This approach aligns with ROS 2 best practices, where different functionalities 
        python3-flask \
        python3-flask-socketio \
        python3-flask-sqlalchemy \
-       python3-flask-wtf \
        python3-socketio \
-       python3-simple-websocket \
-       python-engineio \
        python3-numpy \
-       python3-pyyaml
    ```
 3. Custom ROS 2 message packages:
    - `mvp_msgs`
@@ -348,12 +344,8 @@ This approach aligns with ROS 2 best practices, where different functionalities 
             python3-flask \
             python3-flask-socketio \
             python3-flask-sqlalchemy \
-            python3-flask-wtf \
             python3-socketio \
-            python3-simple-websocket \
-            python-engineio \
             python3-numpy \
-            python3-pyyaml
         ```
 
 3.  Clone required dependency repositories (if not available via `rosdep`), e.g.:

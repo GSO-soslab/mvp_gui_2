@@ -248,7 +248,7 @@ def main(args=None):
     rclpy.init(args=args)
     
     # Enable logging for the client to see connection details
-    sio = sio_client_lib.Client(logger=True, engineio_logger=True)
+    sio = sio_client_lib.Client(logger=True)
 
     @sio.event
     def connect():

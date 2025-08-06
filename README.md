@@ -20,12 +20,8 @@ MVP GUI 2 is a comprehensive web-based graphical user interface designed for mon
             python3-flask \
             python3-flask-socketio \
             python3-flask-sqlalchemy \
-            python3-flask-wtf \
             python3-socketio \
-            python3-simple-websocket \
-            python-engineio \
             python3-numpy \
-            python3-pyyaml
         ```
 
 3.  Clone required dependency repositories (if not available via `rosdep`), e.g.:

@@ -19,12 +19,8 @@
   <exec_depend>python3-flask</exec_depend>
   <exec_depend>python3-flask-socketio</exec_depend>
   <exec_depend>python3-flask-sqlalchemy</exec_depend>
-  <exec_depend>python3-flask-wtf</exec_depend>
   <exec_depend>python3-socketio</exec_depend>
-  <exec_depend>python3-simple-websocket</exec_depend>
-  <exec_depend>python-engineio</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
-  <exec_depend>python3-pyyaml</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 
