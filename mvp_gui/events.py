@@ -113,3 +113,14 @@ def handle_publish_waypoints_request():
         waypoints_payload = [{"lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} for w in waypoints]
         # Emit to the room. The ROS node is in the room and will receive this.
         sio_server.emit('ros_action', {'action': 'publish_waypoints', 'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
+
+@sio_server.on('discover_gps_topics')
+def handle_discover_gps_topics():
+    """
+    A browser client requested to discover GPS topics.
+    Relay this request to the ROS node which will handle the discovery
+    and respond with the list of available topics.
+    """
+    print(f"Browser sid={request.sid} requested GPS topic discovery.")
+    # Emit to the room. The ROS node is in the room and will receive this.
+    sio_server.emit('discover_gps_topics', {}, to=BROADCAST_ROOM)
