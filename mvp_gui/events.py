@@ -89,6 +89,29 @@ def handle_update_launch_keys(data):
     print(f"Received launch key update from ROS node: {keys}")
     # Update the cache stored in the application config
     current_app.config['_launch_keys_cache'] = keys
+
+@sio_server.on('gps_topics_discovered')
+def handle_gps_topics_discovered(data):
+    """
+    Relay the list of discovered GPS topics from the ROS node
+    to all browser clients in the room.
+    """
+    sio_server.emit('gps_topics_discovered', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('gps_topic_subscribed')
+def handle_gps_topic_subscribed(data):
+    """Relay subscription confirmation from ROS node to all browser clients."""
+    sio_server.emit('gps_topic_subscribed', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('gps_topic_unsubscribed')
+def handle_gps_topic_unsubscribed(data):
+    """Relay unsubscription confirmation from ROS node to all browser clients."""
+    sio_server.emit('gps_topic_unsubscribed', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('dynamic_gps_update')
+def handle_dynamic_gps_update(data):
+    """Relay dynamic GPS data from ROS node to all browser clients."""
+    sio_server.emit('dynamic_gps_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
     
 # --- Handlers for events FROM browsers ---
 
@@ -123,4 +146,16 @@ def handle_discover_gps_topics(data):
     """
     print(f"Browser sid={request.sid} requested GPS topic discovery.")
     # Emit to the room. The ROS node is in the room and will receive this.
-    sio_server.emit('discover_gps_topics', data, to=BROADCAST_ROOM)
+    sio_server.emit('discover_gps_topics', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('subscribe_new_gps_topic')
+def handle_subscribe_new_gps_topic(data):
+    """Relay subscribe request from browser to ROS node."""
+    print(f"Relaying subscribe request for GPS topic: {data}")
+    sio_server.emit('subscribe_new_gps_topic', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('unsubscribe_gps_topic')
+def handle_unsubscribe_gps_topic(data):
+    """Relay unsubscribe request from browser to ROS node."""
+    print(f"Relaying unsubscribe request for GPS topic: {data}")
+    sio_server.emit('unsubscribe_gps_topic', data, to=BROADCAST_ROOM, skip_sid=request.sid)

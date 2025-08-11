@@ -216,7 +216,9 @@ class RosInterfaceNode(Node):
         @self.sio.on('subscribe_new_gps_topic')
         def handle_subscribe_new_gps_topic(data):
             topic_name = data.get('topic')
-            self.create_dynamic_gps_subscriber(topic_name)
+            if self.create_dynamic_gps_subscriber(topic_name):
+                self.get_logger().info(f"Successfully subscribed to {topic_name}. Notifying client.")
+                self.sio.emit('gps_topic_subscribed', {'topic': topic_name})
         
         @self.sio.on('discover_gps_topics')
         def handle_discover_gps_topics(data):
@@ -227,10 +229,11 @@ class RosInterfaceNode(Node):
         def handle_unsubscribe_gps_topic(data):
             topic_name = data.get('topic')
             if topic_name in self.dynamic_subscribers:
-                # Remove the subscriber
-                del self.dynamic_subscribers[topic_name]
-                self.get_logger().info(f"Unsubscribed from GPS topic: {topic_name}")
-                # Notify client
+                # Pop the subscriber object from our dict and destroy it
+                subscriber_to_destroy = self.dynamic_subscribers.pop(topic_name)
+                self.destroy_subscription(subscriber_to_destroy)
+                self.get_logger().info(f"Unsubscribed from and destroyed subscription for GPS topic: {topic_name}")
+                # Notify client that unsubscription was successful
                 self.sio.emit('gps_topic_unsubscribed', {'topic': topic_name})
 
     def survey_geopath_callback(self, msg):
