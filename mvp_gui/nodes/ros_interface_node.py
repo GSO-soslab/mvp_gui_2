@@ -1,4 +1,3 @@
-# mvp_gui/nodes/ros_interface_node.py
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
@@ -286,7 +285,12 @@ class RosInterfaceNode(Node):
         """Generic callback for dynamic subscribers"""
         if not self.sio.connected: 
             return
-        gps_data = {"lat": gps_msg.latitude, "lon": gps_msg.longitude, "alt": gps_msg.altitude, 'pos_cov': gps_msg.position_covariance}
+        gps_data = {
+            "lat": gps_msg.latitude, 
+            "lon": gps_msg.longitude, 
+            "alt": gps_msg.altitude, 
+            'pos_cov': list(gps_msg.position_covariance) # Convert ndarray to a JSON-serializable list
+        }
         # Process your message here and emit to GUI
         self.sio.emit('dynamic_gps_update', {'topic': topic_name, 'data': gps_data})
 
