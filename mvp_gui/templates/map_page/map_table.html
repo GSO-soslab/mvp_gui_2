@@ -87,7 +87,7 @@
     .arrow-marker {
         width: 40px;
         height: 40px;
-        background: url('{{ url_for('static', filename='icons/white_arrow.png') }}') no-repeat center center;
+        background: url('{{ url_for(' static', filename=' icons/white_arrow.png') }}') no-repeat center center;
         background-size: contain;
         transform-origin: center;
     }
@@ -101,7 +101,7 @@
     .groundstation-marker {
         width: 45px;
         height: 45px;
-        background-image: url('{{ url_for('static', filename='icons/ground_station_icon.png') }}');
+        background-image: url('{{ url_for(' static', filename=' icons/ground_station_icon.png') }}');
     }
 
     .secondary-marker {
@@ -263,34 +263,34 @@
 
     // Add a function to generate unique colors
     function generateUniqueColor(excludeColors = []) {
-    const colors = [
-        '#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FF33A1',
-        '#33FFF3', '#F3FF33', '#A833FF', '#FF8C33', '#33FF8C'
-    ];
-    
-    // Filter out excluded colors
-    const availableColors = colors.filter(color => !excludeColors.includes(color));
-    
-    // Return a random available color or a random color if all are taken
-    if (availableColors.length > 0) {
-        return availableColors[Math.floor(Math.random() * availableColors.length)];
-    } else {
-        return `#${Math.floor(Math.random()*16777215).toString(16)}`;
-    }
+        const colors = [
+            '#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FF33A1',
+            '#33FFF3', '#F3FF33', '#A833FF', '#FF8C33', '#33FF8C'
+        ];
+
+        // Filter out excluded colors
+        const availableColors = colors.filter(color => !excludeColors.includes(color));
+
+        // Return a random available color or a random color if all are taken
+        if (availableColors.length > 0) {
+            return availableColors[Math.floor(Math.random() * availableColors.length)];
+        } else {
+            return `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+        }
     }
 
     // Add functions to create and update dynamic GPS markers
     function createDynamicGPSMarker(topicName, color) {
-    const el = document.createElement('div');
-    el.className = 'dynamic-gps-marker';
-    el.style.backgroundColor = color;
-    el.style.width = '15px';
-    el.style.height = '15px';
-    el.style.borderRadius = '50%';
-    el.style.border = '2px solid white';
-    el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
-    
-    return new maplibregl.Marker({ element: el }).addTo(map);
+        const el = document.createElement('div');
+        el.className = 'dynamic-gps-marker';
+        el.style.backgroundColor = color;
+        el.style.width = '15px';
+        el.style.height = '15px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
+
+        return new maplibregl.Marker({ element: el }).addTo(map);
     }
 
     // --- Map Initialization Logic ---
@@ -398,20 +398,6 @@
         });
     }
 
-    // Add functions to create and update dynamic GPS markers
-    function createDynamicGPSMarker(topicName, color) {
-    const el = document.createElement('div');
-    el.className = 'dynamic-gps-marker';
-    el.style.backgroundColor = color;
-    el.style.width = '15px';
-    el.style.height = '15px';
-    el.style.borderRadius = '50%';
-    el.style.border = '2px solid white';
-    el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
-    
-    return new maplibregl.Marker({ element: el }).addTo(map);
-    }
-
     // --- Data & Path Update Functions ---
     function redrawAllFromState() {
         if (!isMapInitialized) return;
@@ -465,7 +451,7 @@
         if (!isMapInitialized) return;
         editableAltitudeMarkers.forEach(m => m.remove());
         editableAltitudeMarkers = [];
-        let pathPoints = editableWaypointsData.map(w => ({ lat: w.lat, lon: w.lon, alt: w.alt, surge: w.surge}));
+        let pathPoints = editableWaypointsData.map(w => ({ lat: w.lat, lon: w.lon, alt: w.alt, surge: w.surge }));
         if (currentVehiclePose) {
             pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0 });
         }
@@ -478,59 +464,61 @@
 
     function updateDynamicGPS(topicName, data) {
         if (!map || !data) return;
-        
+
         // Initialize if not already done
         if (!dynamicGPSColors[topicName]) {
             const usedColors = Object.values(dynamicGPSColors);
             dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
             dynamicGPSHistories[topicName] = [];
         }
-        
+
         // Create marker if it doesn't exist
         if (!dynamicGPSMarkers[topicName]) {
             dynamicGPSMarkers[topicName] = createDynamicGPSMarker(topicName, dynamicGPSColors[topicName]);
         }
-        
+
         // Update position
         dynamicGPSMarkers[topicName].setLngLat([data.lon, data.lat]);
-        
+
         // Update history
         dynamicGPSHistories[topicName].push([data.lon, data.lat]);
         if (dynamicGPSHistories[topicName].length > MAX_HISTORY_POINTS) {
             dynamicGPSHistories[topicName].shift();
         }
-        
+
         // Update trail on map
         if (isMapInitialized) {
-            const sourceId = `gps-trail-${topicName}`;
-            const layerId = `gps-trail-layer-${topicName}`;
-            
+            // Sanitize topic name to create a valid ID for MapLibre sources/layers
+            const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+            const sourceId = `gps-trail-${sanitizedTopicName}`;
+            const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+
             // Create source and layer if they don't exist
             if (!map.getSource(sourceId)) {
-            map.addSource(sourceId, { 
-                type: 'geojson', 
-                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } 
-            });
-            
-            map.addLayer({
-                id: layerId,
-                type: 'line',
-                source: sourceId,
-                paint: {
-                'line-color': dynamicGPSColors[topicName],
-                'line-width': 2,
-                'line-opacity': 0.5
-                }
-            });
+                map.addSource(sourceId, {
+                    type: 'geojson',
+                    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+                });
+
+                map.addLayer({
+                    id: layerId,
+                    type: 'line',
+                    source: sourceId,
+                    paint: {
+                        'line-color': dynamicGPSColors[topicName],
+                        'line-width': 2,
+                        'line-opacity': 0.5
+                    }
+                });
             }
-            
+
             // Update trail data
             map.getSource(sourceId).setData({
-            type: 'Feature',
-            geometry: {
-                type: 'LineString',
-                coordinates: dynamicGPSHistories[topicName]
-            }
+                type: 'Feature',
+                geometry: {
+                    type: 'LineString',
+                    coordinates: dynamicGPSHistories[topicName]
+                }
             });
         }
     }
@@ -569,7 +557,7 @@
         // 4. Create altitude labels for each segment of the complete line.
         for (let i = 1; i < linePoints.length; i++) {
             const p1 = { lat: linePoints[i - 1].lat, lon: linePoints[i - 1].lon };
-            const p2 = { lat: linePoints[i].lat, lon: linePoints[i].lon, alt: linePoints[i].alt };
+            const p2 = { lat: linePoints[i].lon, lon: linePoints[i].lon, alt: linePoints[i].alt };
             publishedAltitudeMarkers.push(createAltitudeLabel(calculateMidpoint(p1, p2), 'published', '#fffca0'));
         }
     }
@@ -620,9 +608,9 @@
     // Add WebSocket handler for dynamic GPS updates
     socket.on('dynamic_gps_update', (data) => {
         if (!data || !data.topic || data.data.lon === undefined || data.data.lat === undefined) return;
-        
+
         updateDynamicGPS(data.topic, data.data);
-        
+
         // Initialize map if needed
         if (!map) {
             initializeMap([data.data.lon, data.data.lat]);
@@ -657,6 +645,36 @@
         if (isMapInitialized) {
             drawPublishedPath();
         }
+    });
+
+    // Add a handler to remove GPS data when unsubscribed
+    socket.on('gps_topic_unsubscribed', (data) => {
+        const topicName = data.topic;
+        console.log(`Received unsubscription confirmation for ${topicName}. Removing from map.`);
+
+        if (!topicName || !map || !isMapInitialized) return;
+
+        // Remove marker
+        if (dynamicGPSMarkers[topicName]) {
+            dynamicGPSMarkers[topicName].remove();
+            delete dynamicGPSMarkers[topicName];
+        }
+
+        // Remove trail layer and source
+        const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+        const sourceId = `gps-trail-${sanitizedTopicName}`;
+        const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+
+        if (map.getLayer(layerId)) {
+            map.removeLayer(layerId);
+        }
+        if (map.getSource(sourceId)) {
+            map.removeSource(sourceId);
+        }
+
+        // Clean up data stores
+        delete dynamicGPSHistories[topicName];
+        delete dynamicGPSColors[topicName];
     });
 
     // --- Page Load & Interaction Execution ---
