@@ -21,6 +21,27 @@ Mission
 
   <h4>Waypoints in the Database</h4>
   {% include "mission_page/waypoints_table.html" %}
+
+  <h4>Dynamic GPS Topics</h4>
+  <div class="mb-3">
+    <button id="discover-gps-topics" class="btn btn-info">Discover NavSatFix Topics</button>
+  </div>
+  <div id="gps-topics-container" class="mt-3" style="display: none;">
+    <h5>Available GPS Topics</h5>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Topic Name</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="gps-topics-table-body">
+        <!-- Rows will be populated dynamically -->
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
 
@@ -30,5 +51,59 @@ Mission
     // Use the location object to reload the current page
     location.reload();
   }
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    const discoverBtn = document.getElementById('discover-gps-topics');
+    const topicsContainer = document.getElementById('gps-topics-container');
+    const topicsTableBody = document.getElementById('gps-topics-table-body');
+    
+    discoverBtn.addEventListener('click', function() {
+      // Request topic discovery
+      socket.emit('discover_gps_topics', {});
+    });
+    
+    // Handle discovered topics
+    socket.on('gps_topics_discovered', function(data) {
+      // Clear existing table rows
+      topicsTableBody.innerHTML = '';
+      
+      // Populate table with discovered topics
+      data.topics.forEach(topic => {
+        const row = document.createElement('tr');
+        
+        row.innerHTML = `
+          <td>${topic.name}</td>
+          <td>${topic.type}</td>
+          <td>${topic.subscribed ? 'Subscribed' : 'Not Subscribed'}</td>
+          <td>
+            ${topic.subscribed ? 
+              `<button class="btn btn-sm btn-warning unsubscribe-btn" data-topic="${topic.name}">Unsubscribe</button>` :
+              `<button class="btn btn-sm btn-success subscribe-btn" data-topic="${topic.name}">Subscribe</button>`}
+          </td>
+        `;
+        
+        topicsTableBody.appendChild(row);
+      });
+      
+      // Show the container
+      topicsContainer.style.display = 'block';
+      
+      // Add event listeners to buttons
+      document.querySelectorAll('.subscribe-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const topicName = this.getAttribute('data-topic');
+          socket.emit('subscribe_new_gps_topic', {topic: topicName});
+        });
+      });
+      
+      document.querySelectorAll('.unsubscribe-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const topicName = this.getAttribute('data-topic');
+          socket.emit('unsubscribe_gps_topic', {topic: topicName});
+        });
+      });
+    });
+  });
+  
 </script>
 {% endblock %}

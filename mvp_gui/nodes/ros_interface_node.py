@@ -10,12 +10,15 @@ import numpy as np
 import message_filters
 from nav_msgs.msg import Odometry
 from geographic_msgs.msg import GeoPoseStamped
+from sensor_msgs.msg import NavSatFix
 from mvp_msgs.msg import Waypoint, Waypoints, HelmState
 from std_msgs.msg import Float32MultiArray, Bool, Int16MultiArray
 from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
 from std_srvs.srv import SetBool
 from rcl_interfaces.srv import GetParameters
+from rclpy.topic_endpoint_info import TopicEndpointInfo
+import json
 
 class RosInterfaceNode(Node):
     def __init__(self, sio_client):
@@ -56,6 +59,9 @@ class RosInterfaceNode(Node):
         self.launch_keys = []
         self.gpio_device_keys = []
 
+        # To track dynamically added subscribers
+        self.dynamic_subscribers = {}
+
         self.setup_ros_communications()
         self.setup_sio_handlers()
 
@@ -71,6 +77,25 @@ class RosInterfaceNode(Node):
 
     def get_service(self, key):
         return self.service_ns + self.get_parameter(key).value
+
+    def discover_navsatfix_topics(self):
+        """Discover all topics of type sensor_msgs/msg/NavSatFix"""
+        # Get all topic names and types
+        topic_names_and_types = self.get_topic_names_and_types()
+        
+        # Filter for NavSatFix topics
+        navsatfix_topics = []
+        for name, types in topic_names_and_types:
+            if 'sensor_msgs/msg/NavSatFix' in types:
+                # Check if we're already subscribed to this topic
+                is_subscribed = name in self.dynamic_subscribers
+                navsatfix_topics.append({
+                    'name': name,
+                    'type': 'sensor_msgs/msg/NavSatFix',
+                    'subscribed': is_subscribed
+                })
+        
+        return navsatfix_topics
 
     def setup_ros_communications(self):
         self.callback_group = ReentrantCallbackGroup()
@@ -146,6 +171,33 @@ class RosInterfaceNode(Node):
             self.get_logger().error(f"Failed to process parameter fetch result: {e}. Retrying in 5s...")
             self.param_fetch_timer = self.create_timer(5.0, self.try_fetch_and_setup_dynamic_clients)
 
+    def create_dynamic_gps_subscriber(self, topic_name):
+        """Create a new GPS subscriber dynamically"""
+        # Check if subscriber already exists
+        if topic_name in self.dynamic_subscribers:
+            self.get_logger().warn(f"Subscriber for {topic_name} already exists")
+            return None
+        
+        # Create a closure to capture the topic_name
+        def make_callback(topic):
+            def callback(msg):
+                self.dynamic_gps_callback(msg, topic)
+            return callback
+        
+        # Create subscriber with the closure
+        subscriber = self.create_subscription(
+            NavSatFix, 
+            topic_name, 
+            make_callback(topic_name), 
+            10, 
+            callback_group=self.callback_group
+        )
+        
+        # Store reference to prevent garbage collection
+        self.dynamic_subscribers[topic_name] = subscriber
+        self.get_logger().info(f"Created new GPS subscriber for topic: {topic_name}")
+        return subscriber
+
     def setup_sio_handlers(self):
         @self.sio.on('ros_action')
         def handle_ros_action(data):
@@ -160,6 +212,26 @@ class RosInterfaceNode(Node):
             }
             if action in actions:
                 actions[action](data)
+        
+        @self.sio.on('subscribe_new_gps_topic')
+        def handle_subscribe_new_gps_topic(data):
+            topic_name = data.get('topic')
+            self.create_dynamic_gps_subscriber(topic_name)
+        
+        @self.sio.on('discover_gps_topics')
+        def handle_discover_gps_topics(data):
+            topics = self.discover_navsatfix_topics()
+            self.sio.emit('gps_topics_discovered', {'topics': topics})
+        
+        @self.sio.on('unsubscribe_gps_topic')
+        def handle_unsubscribe_gps_topic(data):
+            topic_name = data.get('topic')
+            if topic_name in self.dynamic_subscribers:
+                # Remove the subscriber
+                del self.dynamic_subscribers[topic_name]
+                self.get_logger().info(f"Unsubscribed from GPS topic: {topic_name}")
+                # Notify client
+                self.sio.emit('gps_topic_unsubscribed', {'topic': topic_name})
 
     def survey_geopath_callback(self, msg):
         if not self.sio.connected: return
@@ -206,6 +278,14 @@ class RosInterfaceNode(Node):
             "p": np.rad2deg(odom_msg.twist.twist.angular.x), "q": np.rad2deg(odom_msg.twist.twist.angular.y), "r": np.rad2deg(odom_msg.twist.twist.angular.z),
         }
         self.sio.emit('vehicle_pose_update', pose_data)
+
+    def dynamic_gps_callback(self, gps_msg, topic_name):
+        """Generic callback for dynamic subscribers"""
+        if not self.sio.connected: 
+            return
+        gps_data = {"lat": gps_msg.latitude, "lon": gps_msg.longitude, "alt": gps_msg.altitude, 'pos_cov': gps_msg.position_covariance}
+        # Process your message here and emit to GUI
+        self.sio.emit('dynamic_gps_update', {'topic': topic_name, 'data': gps_data})
 
     def _check_service(self, client, timeout_sec=1.0):
         if not client.wait_for_service(timeout_sec=timeout_sec): 
