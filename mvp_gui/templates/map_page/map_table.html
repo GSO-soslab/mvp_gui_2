@@ -87,7 +87,7 @@
     .arrow-marker {
         width: 40px;
         height: 40px;
-        background: url('{{ url_for('static', filename=' icons/white_arrow.png') }}') no-repeat center center;
+        background: url('{{ url_for(' static', filename=' icons/white_arrow.png') }}') no-repeat center center;
         background-size: contain;
         transform-origin: center;
     }
@@ -101,7 +101,7 @@
     .groundstation-marker {
         width: 45px;
         height: 45px;
-        background-image: url('{{ url_for('static', filename=' icons/ground_station_icon.png') }}');
+        background-image: url('{{ url_for(' static', filename=' icons/ground_station_icon.png') }}');
     }
 
     .secondary-marker {
@@ -280,7 +280,7 @@
     }
 
     // Add functions to create and update dynamic GPS markers
-    function createDynamicGPSMarker(topicName, color) {
+    function createDynamicGPSMarker(color, lngLat) {
         const el = document.createElement('div');
         el.className = 'dynamic-gps-marker';
         el.style.backgroundColor = color;
@@ -290,7 +290,7 @@
         el.style.border = '2px solid white';
         el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
 
-        return new maplibregl.Marker({ element: el }).addTo(map);
+        return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
     }
 
     // --- Map Initialization Logic ---
@@ -463,64 +463,71 @@
     }
 
     function updateDynamicGPS(topicName, data) {
-        if (!map || !data) return;
+        // Robustly check for valid data.
+        if (!map || !data || data.lon == null || data.lat == null) {
+            return;
+        }
 
-        // Initialize if not already done
+        // Initialize color and history for new topics. This is safe to do before the map is ready.
         if (!dynamicGPSColors[topicName]) {
             const usedColors = Object.values(dynamicGPSColors);
             dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
             dynamicGPSHistories[topicName] = [];
         }
 
-        // Create marker if it doesn't exist
-        if (!dynamicGPSMarkers[topicName]) {
-            dynamicGPSMarkers[topicName] = createDynamicGPSMarker(topicName, dynamicGPSColors[topicName]);
-        }
+        const lngLat = [data.lon, data.lat];
 
-        // Update position
-        dynamicGPSMarkers[topicName].setLngLat([data.lon, data.lat]);
-
-        // Update history
-        dynamicGPSHistories[topicName].push([data.lon, data.lat]);
+        // Update history. This is also safe to do before map is ready.
+        dynamicGPSHistories[topicName].push(lngLat);
         if (dynamicGPSHistories[topicName].length > MAX_HISTORY_POINTS) {
             dynamicGPSHistories[topicName].shift();
         }
 
+        // --- All subsequent operations modify the map and must wait for it to be initialized ---
+        if (!isMapInitialized) {
+            return;
+        }
+
+        // Create marker if it doesn't exist, otherwise update its position.
+        if (!dynamicGPSMarkers[topicName]) {
+            dynamicGPSMarkers[topicName] = createDynamicGPSMarker(dynamicGPSColors[topicName], lngLat);
+        } else {
+            dynamicGPSMarkers[topicName].setLngLat(lngLat);
+        }
+
         // Update trail on map
-        if (isMapInitialized) {
-            // Sanitize topic name to create a valid ID for MapLibre sources/layers
-            const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
-            const sourceId = `gps-trail-${sanitizedTopicName}`;
-            const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+        // Sanitize topic name to create a valid ID for MapLibre sources/layers
+        const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+        const sourceId = `gps-trail-${sanitizedTopicName}`;
+        const layerId = `gps-trail-layer-${sanitizedTopicName}`;
 
-            // Create source and layer if they don't exist
-            if (!map.getSource(sourceId)) {
-                map.addSource(sourceId, {
-                    type: 'geojson',
-                    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
-                });
+        // Create source and layer if they don't exist
+        if (!map.getSource(sourceId)) {
+            map.addSource(sourceId, {
+                type: 'geojson',
+                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+            });
 
-                map.addLayer({
-                    id: layerId,
-                    type: 'line',
-                    source: sourceId,
-                    paint: {
-                        'line-color': dynamicGPSColors[topicName],
-                        'line-width': 2,
-                        'line-opacity': 0.5
-                    }
-                });
-            }
-
-            // Update trail data
-            map.getSource(sourceId).setData({
-                type: 'Feature',
-                geometry: {
-                    type: 'LineString',
-                    coordinates: dynamicGPSHistories[topicName]
+            map.addLayer({
+                id: layerId,
+                type: 'line',
+                source: sourceId,
+                paint: {
+                    'line-color': dynamicGPSColors[topicName],
+                    'line-width': 2,
+                    'line-opacity': 0.5
                 }
             });
         }
+
+        // Update trail data
+        map.getSource(sourceId).setData({
+            type: 'Feature',
+            geometry: {
+                type: 'LineString',
+                coordinates: dynamicGPSHistories[topicName]
+            }
+        });
     }
 
     function drawPublishedPath() {
@@ -607,14 +614,19 @@
 
     // Add WebSocket handler for dynamic GPS updates
     socket.on('dynamic_gps_update', (data) => {
-        if (!data || !data.topic || data.data.lon === undefined || data.data.lat === undefined) return;
+        if (!data || !data.topic || !data.data) {
+            console.error("Received incomplete dynamic_gps_update:", data);
+            return;
+        }
 
-        updateDynamicGPS(data.topic, data.data);
-
-        // Initialize map if needed
-        if (!map) {
+        // Initialize map if it hasn't been, using the first valid coordinates we receive.
+        // This ensures the `map` object exists before `updateDynamicGPS` is called.
+        if (!map && data.data.lon != null && data.data.lat != null) {
             initializeMap([data.data.lon, data.data.lat]);
         }
+
+        // updateDynamicGPS has its own internal checks for map state and data validity.
+        updateDynamicGPS(data.topic, data.data);
     });
 
     socket.on('published_path_update', (data) => {
