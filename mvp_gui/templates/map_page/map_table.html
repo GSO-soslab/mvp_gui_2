@@ -625,7 +625,7 @@
                         paint: {
                             'line-color': dynamicGPSColors[topicName],
                             'line-width': 2,
-                            'line-opacity': 0.5
+                            'line-opacity': 0.3
                         }
                     });
                 }
@@ -720,26 +720,37 @@
         const topicName = data.topic;
         console.log(`Received unsubscription confirmation for ${topicName}. Removing from map.`);
         if (!topicName || !map || !isMapInitialized) return;
+
         // Remove marker
         if (dynamicGPSMarkers[topicName]) {
             dynamicGPSMarkers[topicName].remove();
             delete dynamicGPSMarkers[topicName];
         }
-        // Remove trail layer and source
+
         const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
         const sourceId = `gps-trail-${sanitizedTopicName}`;
         const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+
+        // To ensure the trail disappears visually, first update its data to be empty.
+        if (map.getSource(sourceId)) {
+            map.getSource(sourceId).setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+        }
+
+        // Now, attempt to remove the layer and source to clean up resources.
         if (map.getLayer(layerId)) {
             map.removeLayer(layerId);
         }
         if (map.getSource(sourceId)) {
             map.removeSource(sourceId);
         }
+
         // Clean up client-side data stores
         delete dynamicGPSHistories[topicName];
         delete dynamicGPSColors[topicName];
+
         // Update the legend
         updateLegend();
+
         // Persist the state change to session storage so the trail doesn't reappear on reload.
         saveMapState();
     });
