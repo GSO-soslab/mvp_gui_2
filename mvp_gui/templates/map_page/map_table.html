@@ -302,7 +302,7 @@
 
         // Static items
         const staticItems = [
-            { color: '#44e215', label: 'Vehicle Trail' },
+            { color: '#44e215', label: 'Vehicle Path' },
             { color: '#ff190a', label: 'Editable Mission Path' },
             { color: '#ffd500', label: 'Published Mission Path' }
         ];
@@ -389,29 +389,49 @@
         return markerElement;
     }
 
-    // Add a function to generate unique colors
-    function generateUniqueColor(excludeColors = []) {
-        const colors = [
-            '#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FF33A1',
-            '#33FFF3', '#F3FF33', '#A833FF', '#FF8C33', '#33FF8C'
+    // Add a function to generate unique colors.
+    // It uses a fixed list of 10 colors in order. If all are used, it generates random colors.
+    function generateUniqueColor(usedColors = []) {
+        const fixedColors = [
+            '#33C4FF', // 1. Light Blue
+            '#FF6347', // 2. Tomato (Orange-Red)
+            '#BA55D3', // 3. Medium Orchid (Purple)
+            '#40E0D0', // 4. Turquoise (Cyan)
+            '#FF8C00', // 5. Dark Orange
+            '#EE82EE', // 6. Violet
+            '#6A5ACD', // 7. Slate Blue
+            '#F08080', // 8. Light Coral (Pinkish)
+            '#20B2AA', // 9. Light Sea Green (Teal)
+            '#C71585'  // 10. Medium Violet Red (Magenta)
         ];
-        // Filter out excluded colors
-        const availableColors = colors.filter(color => !excludeColors.includes(color));
-        // Return a random available color or a random color if all are taken
-        if (availableColors.length > 0) {
-            return availableColors[Math.floor(Math.random() * availableColors.length)];
-        } else {
-            return `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+
+        // Find the first fixed color that is not already in the `usedColors` array.
+        // This ensures colors are assigned in order and are reused if a trail is removed.
+        for (const color of fixedColors) {
+            if (!usedColors.includes(color)) {
+                return color;
+            }
         }
+
+        // --- Fallback to random color generation if all 10 fixed colors are in use ---
+        let randomColor;
+        const allUsedColors = new Set(usedColors); // Use a Set for efficient lookup.
+        do {
+            // Generate a random 6-digit hex color.
+            randomColor = `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+        } while (allUsedColors.has(randomColor)); // Loop until we find a truly unique color.
+
+        return randomColor;
     }
+
 
     // Add functions to create and update dynamic GPS markers
     function createDynamicGPSMarker(color, lngLat) {
         const el = document.createElement('div');
         el.className = 'dynamic-gps-marker';
         el.style.backgroundColor = color;
-        el.style.width = '15px';
-        el.style.height = '15px';
+        el.style.width = '12px';
+        el.style.height = '12px';
         el.style.borderRadius = '50%';
         el.style.border = '2px solid white';
         el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';

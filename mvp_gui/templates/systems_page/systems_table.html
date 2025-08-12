@@ -1,5 +1,6 @@
 <h4>ROS Launch Control</h4>
-<p style="color: lightskyblue;">Use these buttons to launch or terminate external ROS launch files managed by the C2 Commander.</p>
+<p style="color: lightskyblue;">Use these buttons to launch or terminate external ROS launch files managed by the C2
+    Commander.</p>
 <table class="table table-hover table-dark">
     <thead>
         <tr>
@@ -7,26 +8,11 @@
             <th scope="col">Action</th>
         </tr>
     </thead>
-    <tbody>
-        {% if launch_files %}
-            {% for launch_key in launch_files %}
-            <tr>
-                <td>{{ launch_key }}</td>
-                <td>
-                    <button class="btn btn-success btn-sm" onclick="launchFile('{{ launch_key }}', true)">
-                        Launch
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="launchFile('{{ launch_key }}', false)">
-                        Terminate
-                    </button>
-                </td>
-            </tr>
-            {% endfor %}
-        {% else %}
-            <tr>
-                <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch files from ROS node...</td>
-            </tr>
-        {% endif %}
+    <tbody id="launch-control-table-body">
+        <tr>
+            <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch files from ROS node...
+            </td>
+        </tr>
     </tbody>
 </table>
 <br>
@@ -39,20 +25,11 @@
             <th scope="col">Status</th>
         </tr>
     </thead>
-    <tbody>
-        {% if launch_files %}
-            {% for launch_key in launch_files %}
-            <tr>
-                <td>{{ launch_key }}</td>
-                <!-- Use replace filter to create a valid DOM ID -->
-                <td id="status-{{ launch_key | replace('/', '-') }}">Unknown</td>
-            </tr>
-            {% endfor %}
-        {% else %}
-             <tr>
-                <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch status from ROS node...</td>
-            </tr>
-        {% endif %}
+    <tbody id="launch-status-table-body">
+        <tr>
+            <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch status from ROS node...
+            </td>
+        </tr>
     </tbody>
 </table>
 
@@ -67,7 +44,65 @@
                 key: launchKey,
                 status: status
             });
-        }
+        };
+
+        // --- Handler to build/update the tables with launch keys ---
+        socket.on('update_launch_keys', function (data) {
+            console.log('Received launch keys update:', data);
+            const keys = data.keys || [];
+            const controlTableBody = document.getElementById('launch-control-table-body');
+            const statusTableBody = document.getElementById('launch-status-table-body');
+
+            if (!controlTableBody || !statusTableBody) {
+                console.error('Table body elements not found!');
+                return;
+            }
+
+            // Clear existing rows
+            controlTableBody.innerHTML = '';
+            statusTableBody.innerHTML = '';
+
+            if (keys.length === 0) {
+                const controlPlaceholder = `
+                    <tr>
+                        <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch files from ROS node...</td>
+                    </tr>`;
+                const statusPlaceholder = `
+                    <tr>
+                        <td colspan="2" class="text-center font-italic text-muted py-3">Waiting for launch status from ROS node...</td>
+                    </tr>`;
+                controlTableBody.innerHTML = controlPlaceholder;
+                statusTableBody.innerHTML = statusPlaceholder;
+                return;
+            }
+
+            // Populate tables with new data
+            keys.forEach(key => {
+                // Populate control table
+                const controlRow = document.createElement('tr');
+                controlRow.innerHTML = `
+                    <td>${key}</td>
+                    <td>
+                        <button class="btn btn-success btn-sm" onclick="launchFile('${key}', true)">
+                            Launch
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="launchFile('${key}', false)">
+                            Terminate
+                        </button>
+                    </td>
+                `;
+                controlTableBody.appendChild(controlRow);
+
+                // Populate status table
+                const statusRow = document.createElement('tr');
+                const statusCellId = 'status-' + key.replace(/\//g, '-');
+                statusRow.innerHTML = `
+                    <td>${key}</td>
+                    <td id="${statusCellId}">Unknown</td>
+                `;
+                statusTableBody.appendChild(statusRow);
+            });
+        });
 
         // --- Status Updates via WebSocket ---
         socket.on('launch_status_update', function (data) {
@@ -89,7 +124,7 @@
                         statusCell.style.color = 'lightcoral';
                     }
                 } else {
-                    console.error('Could not find status cell with ID:', elementId);
+                    console.warn('Could not find status cell with ID:', elementId, '- Table might not be populated yet.');
                 }
             });
         });

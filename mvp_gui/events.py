@@ -9,6 +9,7 @@ BROADCAST_ROOM = 'all_clients_room'
 # --- Server-side cache for stateful data ---
 last_published_path = []
 last_vehicle_pose = None # Cache for vehicle pose
+last_launch_status = None # Cache for launch status
 
 # --- Handlers for built-in events ---
 @sio_server.on('connect')
@@ -30,6 +31,17 @@ def handle_connect():
     cached_gps_topics = current_app.config.get('_gps_topics_cache', [])
     if cached_gps_topics:
         sio_server.emit('gps_topics_discovered', {'topics': cached_gps_topics}, to=request.sid)
+
+    # Send cached launch keys if they exist
+    cached_launch_keys = current_app.config.get('_launch_keys_cache', [])
+    if cached_launch_keys:
+        print(f"Sending cached launch keys to new client {request.sid}")
+        sio_server.emit('update_launch_keys', {'keys': cached_launch_keys}, to=request.sid)
+        
+    # Send cached launch status if it exists
+    if last_launch_status:
+        print(f"Sending cached launch status to new client {request.sid}")
+        sio_server.emit('launch_status_update', last_launch_status, to=request.sid)
 
 
 @sio_server.on('disconnect')
@@ -75,7 +87,9 @@ def handle_controller_state_update(data):
 
 @sio_server.on('launch_status_update')
 def handle_launch_status_update(data):
-    """Relay launch status from ROS node to all browser clients in the room."""
+    """Relay launch status from ROS node to all browser clients in the room and cache it."""
+    global last_launch_status
+    last_launch_status = data # Cache the latest status
     sio_server.emit('launch_status_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
     
 @sio_server.on('published_path_update')
@@ -89,12 +103,15 @@ def handle_published_path_update(data):
 def handle_update_launch_keys(data):
     """
     Event handler for when the ROS node sends the list of launch files.
-    This updates the server's cache in the Flask app config.
+    This updates the server's cache in the Flask app config and relays the update
+    to all connected browser clients.
     """
     keys = data.get('keys', [])
-    print(f"Received launch key update from ROS node: {keys}")
+    print(f"Received launch key update from ROS node, relaying to browsers: {keys}")
     # Update the cache stored in the application config
     current_app.config['_launch_keys_cache'] = keys
+    # Relay this update to all browser clients in the room.
+    sio_server.emit('update_launch_keys', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('gps_topics_discovered')
 def handle_gps_topics_discovered(data):
