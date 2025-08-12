@@ -153,11 +153,12 @@
 
     // --- State Persistence Functions ---
     function saveMapState() {
-        // We only save the view settings and history trails, not live data.
+        // We only save the view settings, history trails, and colors.
         const stateToSave = {
             isOnline: isOnlineMap,
             vehicleHistory: vehicleHistory,
             dynamicGPSHistories: dynamicGPSHistories,
+            dynamicGPSColors: dynamicGPSColors,
         };
         if (map && isMapInitialized) {
             stateToSave.zoom = map.getZoom();
@@ -172,9 +173,10 @@
             try {
                 const savedState = JSON.parse(savedStateJSON);
                 isOnlineMap = savedState.isOnline ?? false; // Default to offline if not in saved state
-                // Restore history trails
+                // Restore history trails and colors
                 vehicleHistory = savedState.vehicleHistory || [];
                 dynamicGPSHistories = savedState.dynamicGPSHistories || {};
+                dynamicGPSColors = savedState.dynamicGPSColors || {};
 
                 // Return camera position if it exists
                 if (savedState.center) {
@@ -332,7 +334,7 @@
 
             map.addSource('published-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
-            
+
             isMapInitialized = true;
             // Redraw everything that might have been restored or received while map was loading
             createEditableWaypointMarkers();
