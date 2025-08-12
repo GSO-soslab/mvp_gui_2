@@ -14,7 +14,7 @@
     <!-- Add Socket.IO client library -->
     <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
 
-<script>
+    <script>
         // Establish a global Socket.IO connection
         const socket = io();
         socket.on('connect', () => {
@@ -22,6 +22,45 @@
         });
         socket.on('disconnect', () => {
             console.log('Disconnected from server.');
+        });
+
+        // Global handler to update map session storage when a GPS topic is unsubscribed,
+        // ensuring the state is correct even if the map page isn't open.
+        socket.on('gps_topic_unsubscribed', (data) => {
+            const topicName = data.topic;
+            if (!topicName) return;
+
+            console.log(`Global Unsubscribe Handler: Received event for ${topicName}. Updating session storage.`);
+
+            const MAP_STATE_KEY = 'mvpMapState'; // Must match the key in map_table.html
+            const savedStateJSON = sessionStorage.getItem(MAP_STATE_KEY);
+
+            if (savedStateJSON) {
+                try {
+                    const savedState = JSON.parse(savedStateJSON);
+                    let stateModified = false;
+
+                    // Remove the topic's history trail from the stored state
+                    if (savedState.dynamicGPSHistories && savedState.dynamicGPSHistories.hasOwnProperty(topicName)) {
+                        delete savedState.dynamicGPSHistories[topicName];
+                        stateModified = true;
+                    }
+
+                    // Remove the topic's color from the stored state
+                    if (savedState.dynamicGPSColors && savedState.dynamicGPSColors.hasOwnProperty(topicName)) {
+                        delete savedState.dynamicGPSColors[topicName];
+                        stateModified = true;
+                    }
+
+                    // If we changed something, write it back to session storage
+                    if (stateModified) {
+                        sessionStorage.setItem(MAP_STATE_KEY, JSON.stringify(savedState));
+                        console.log(`Global Unsubscribe Handler: Successfully updated session storage for ${topicName}.`);
+                    }
+                } catch (e) {
+                    console.error("Global Unsubscribe Handler: Error updating map state from session storage:", e);
+                }
+            }
         });
     </script>
 
