@@ -3,6 +3,14 @@
 
 <div id="map" class="map"></div>
 
+<!-- LEGEND -->
+<div id="map-legend" class="map-legend">
+    <h4>Legend</h4>
+    <ul id="legend-items">
+        <!-- Dynamically populated -->
+    </ul>
+</div>
+
 <style>
     /* --- Styles for Published Waypoints (Yellow Triangles) --- */
     .published-wpt-marker {
@@ -87,7 +95,7 @@
     .arrow-marker {
         width: 40px;
         height: 40px;
-        background: url('{{ url_for('static', filename='icons/white_arrow.png') }}') no-repeat center center;
+        background: url('{{ url_for(' static', filename=' icons/white_arrow.png') }}') no-repeat center center;
         background-size: contain;
         transform-origin: center;
     }
@@ -101,7 +109,7 @@
     .groundstation-marker {
         width: 45px;
         height: 45px;
-        background-image: url('{{ url_for('static', filename='icons/ground_station_icon.png') }}');
+        background-image: url('{{ url_for(' static', filename=' icons/ground_station_icon.png') }}');
     }
 
     .secondary-marker {
@@ -109,6 +117,49 @@
         height: 20px;
         background-color: blue;
         border-radius: 50%;
+    }
+
+    /* --- Legend Styles --- */
+    .map-legend {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(40, 40, 40, 0.85);
+        color: #fff;
+        padding: 10px 15px;
+        border-radius: 5px;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+        max-width: 250px;
+        border: 1px solid #555;
+    }
+
+    .map-legend h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 16px;
+        border-bottom: 1px solid #666;
+        padding-bottom: 5px;
+    }
+
+    .map-legend ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .map-legend li {
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        font-size: 12px;
+    }
+
+    .legend-color-box {
+        width: 20px;
+        height: 10px;
+        margin-right: 10px;
+        border: 1px solid #ccc;
     }
 </style>
 
@@ -147,9 +198,9 @@
     let publishedAltitudeMarkers = [];
 
     // --- Dynamic GPS ---
-    let dynamicGPSMarkers = {};  // Store markers for each GPS topic
-    let dynamicGPSHistories = {};  // Store histories for each GPS topic
-    let dynamicGPSColors = {};  // Store colors for each GPS topic
+    let dynamicGPSMarkers = {}; // Store markers for each GPS topic
+    let dynamicGPSHistories = {}; // Store histories for each GPS topic
+    let dynamicGPSColors = {}; // Store colors for each GPS topic
 
     // --- State Persistence Functions ---
     function saveMapState() {
@@ -193,6 +244,36 @@
     }
 
     // --- Helper Functions ---
+    function updateLegend() {
+        const legendItemsContainer = document.getElementById('legend-items');
+        if (!legendItemsContainer) return;
+
+        legendItemsContainer.innerHTML = ''; // Clear existing legend
+
+        // Static items
+        const staticItems = [
+            { color: '#44e215', label: 'Vehicle Trail' },
+            { color: '#ff190a', label: 'Editable Mission Path' },
+            { color: '#ffd500', label: 'Published Mission Path' }
+        ];
+
+        staticItems.forEach(item => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="legend-color-box" style="background-color: ${item.color};"></span> ${item.label}`;
+            legendItemsContainer.appendChild(li);
+        });
+
+        // Dynamic GPS items
+        for (const topicName in dynamicGPSColors) {
+            if (dynamicGPSColors.hasOwnProperty(topicName)) {
+                const color = dynamicGPSColors[topicName];
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="legend-color-box" style="background-color: ${color};"></span> ${topicName}`;
+                legendItemsContainer.appendChild(li);
+            }
+        }
+    }
+
     function calculateMidpoint(p1, p2) {
         return {
             latitude: (p1.lat + p2.lat) / 2,
@@ -339,6 +420,7 @@
             // Redraw everything that might have been restored or received while map was loading
             createEditableWaypointMarkers();
             redrawAllFromState();
+            updateLegend(); // Update legend with static and restored dynamic items
         });
     }
 
@@ -447,33 +529,41 @@
         if (!map || !data || data.lon == null || data.lat == null) {
             return;
         }
+
+        let isNewTopic = false;
         // Initialize color and history for new topics. This is safe to do before the map is ready.
         if (!dynamicGPSColors[topicName]) {
+            isNewTopic = true;
             const usedColors = Object.values(dynamicGPSColors);
             dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
             dynamicGPSHistories[topicName] = [];
         }
+
         const lngLat = [data.lon, data.lat];
         // Update history. This is also safe to do before map is ready.
         dynamicGPSHistories[topicName].push(lngLat);
         if (dynamicGPSHistories[topicName].length > MAX_HISTORY_POINTS) {
             dynamicGPSHistories[topicName].shift();
         }
+
         // --- All subsequent operations modify the map and must wait for it to be initialized ---
         if (!isMapInitialized) {
             return;
         }
+
         // Create marker if it doesn't exist, otherwise update its position.
         if (!dynamicGPSMarkers[topicName]) {
             dynamicGPSMarkers[topicName] = createDynamicGPSMarker(dynamicGPSColors[topicName], lngLat);
         } else {
             dynamicGPSMarkers[topicName].setLngLat(lngLat);
         }
+
         // Update trail on map
         // Sanitize topic name to create a valid ID for MapLibre sources/layers
         const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
         const sourceId = `gps-trail-${sanitizedTopicName}`;
         const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+
         // Create source and layer if they don't exist
         if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
@@ -487,10 +577,11 @@
                 paint: {
                     'line-color': dynamicGPSColors[topicName],
                     'line-width': 2,
-                    'line-opacity': 0.5
+                    'line-opacity': 0.3
                 }
             });
         }
+
         // Update trail data
         map.getSource(sourceId).setData({
             type: 'Feature',
@@ -499,6 +590,10 @@
                 coordinates: dynamicGPSHistories[topicName]
             }
         });
+
+        if (isNewTopic) {
+            updateLegend();
+        }
     }
 
     function redrawDynamicGpsTrails() {
@@ -640,9 +735,13 @@
         if (map.getSource(sourceId)) {
             map.removeSource(sourceId);
         }
-        // Clean up data stores
+        // Clean up client-side data stores
         delete dynamicGPSHistories[topicName];
         delete dynamicGPSColors[topicName];
+        // Update the legend
+        updateLegend();
+        // Persist the state change to session storage so the trail doesn't reappear on reload.
+        saveMapState();
     });
 
     // --- Page Load & Interaction Execution ---
