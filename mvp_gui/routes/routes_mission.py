@@ -1,4 +1,3 @@
-# mvp_gui/routes/routes_mission.py
 from flask import render_template, request, redirect, url_for, Blueprint, current_app
 from ..web_utils import db
 from ..models import Waypoint
@@ -36,6 +35,7 @@ def generate_waypoints_from_kml(file_path, replace_flag):
 def mission_page():
     no_pose_available = request.args.get('no_pose_reset') == 'true'
     waypoints = Waypoint.query.order_by(Waypoint.id).all()
+    gps_topics = current_app.config.get('_gps_topics_cache', [])
     
     if request.method == 'POST':
         action_url = url_for('mission_bp.mission_page')
@@ -59,7 +59,11 @@ def mission_page():
                 renumber_waypoints()
             return redirect(action_url)
 
-    return render_template("mission.html", waypoints=waypoints, current_page="mission", no_pose_available=no_pose_available)
+    return render_template("mission.html", 
+                           waypoints=waypoints, 
+                           current_page="mission", 
+                           no_pose_available=no_pose_available,
+                           gps_topics=gps_topics)
 
 @mission_bp.route("/mission/reset_waypoints", methods=['POST'])
 def reset_waypoints():

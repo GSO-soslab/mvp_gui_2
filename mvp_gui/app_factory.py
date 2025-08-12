@@ -30,6 +30,7 @@ def create_app(pkg_share_dir):
     
     # A cache for dynamic data from the ROS node
     app.config['_launch_keys_cache'] = []
+    app.config['_gps_topics_cache'] = []
 
     # Initialize extensions with the app
     db.init_app(app)

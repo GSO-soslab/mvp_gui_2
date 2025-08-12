@@ -26,7 +26,7 @@ Mission
   <div class="mb-3">
     <button id="discover-gps-topics" class="btn btn-info">Discover NavSatFix Topics</button>
   </div>
-  <div id="gps-topics-container" class="mt-3" style="display: none;">
+  <div id="gps-topics-container" class="mt-3" {% if not gps_topics %}style="display: none;" {% endif %}>
     <h5>Available GPS Topics</h5>
     <table class="table table-hover table-dark">
       <thead>
@@ -38,10 +38,28 @@ Mission
         </tr>
       </thead>
       <tbody id="gps-topics-table-body">
-        <!-- Rows will be populated dynamically -->
+        {% if gps_topics %}
+        {% for topic in gps_topics %}
+        <tr>
+          <td>{{ topic.name }}</td>
+          <td>{{ topic.type }}</td>
+          <td style="color: {{ 'lightgreen' if topic.subscribed else 'lightcoral' }}; font-weight: bold;">
+            {{ 'Subscribed' if topic.subscribed else 'Not Subscribed' }}
+          </td>
+          <td>
+            {% if topic.subscribed %}
+            <button class="btn btn-sm btn-warning unsubscribe-btn" data-topic="{{ topic.name }}">Unsubscribe</button>
+            {% else %}
+            <button class="btn btn-sm btn-success subscribe-btn" data-topic="{{ topic.name }}">Subscribe</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% else %}
         <tr>
           <td colspan="4" class="text-center">Click "Discover" to find topics...</td>
         </tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
@@ -60,11 +78,27 @@ Mission
     const topicsContainer = document.getElementById('gps-topics-container');
     const topicsTableBody = document.getElementById('gps-topics-table-body');
 
+    // --- Event Handlers ---
     discoverBtn.addEventListener('click', function () {
       console.log("Requesting GPS topic discovery...");
       socket.emit('discover_gps_topics', {});
     });
 
+    // Use event delegation for subscribe/unsubscribe buttons
+    topicsTableBody.addEventListener('click', function (event) {
+      const target = event.target;
+      if (target.classList.contains('subscribe-btn')) {
+        const topicName = target.getAttribute('data-topic');
+        console.log("Requesting subscription to:", topicName);
+        socket.emit('subscribe_new_gps_topic', { topic: topicName });
+      } else if (target.classList.contains('unsubscribe-btn')) {
+        const topicName = target.getAttribute('data-topic');
+        console.log("Requesting unsubscription from:", topicName);
+        socket.emit('unsubscribe_gps_topic', { topic: topicName });
+      }
+    });
+
+    // --- Socket.IO Listeners ---
     function refreshTopics() {
       // A short delay to allow the backend to process the change
       setTimeout(() => {
@@ -83,7 +117,7 @@ Mission
       refreshTopics();
     });
 
-    // Handle discovered topics
+    // Handle discovered topics and rebuild the table
     socket.on('gps_topics_discovered', function (data) {
       console.log("Received discovered topics:", data);
       topicsTableBody.innerHTML = ''; // Clear existing table rows
@@ -93,6 +127,10 @@ Mission
       } else {
         data.topics.forEach(topic => {
           const row = document.createElement('tr');
+          const buttonHtml = topic.subscribed
+            ? `<button class="btn btn-sm btn-warning unsubscribe-btn" data-topic="${topic.name}">Unsubscribe</button>`
+            : `<button class="btn btn-sm btn-success subscribe-btn" data-topic="${topic.name}">Subscribe</button>`;
+
           row.innerHTML = `
             <td>${topic.name}</td>
             <td>${topic.type}</td>
@@ -100,9 +138,7 @@ Mission
               ${topic.subscribed ? 'Subscribed' : 'Not Subscribed'}
             </td>
             <td>
-              ${topic.subscribed ?
-              `<button class="btn btn-sm btn-warning unsubscribe-btn" data-topic="${topic.name}">Unsubscribe</button>` :
-              `<button class="btn btn-sm btn-success subscribe-btn" data-topic="${topic.name}">Subscribe</button>`}
+              ${buttonHtml}
             </td>
           `;
           topicsTableBody.appendChild(row);
@@ -110,23 +146,6 @@ Mission
       }
 
       topicsContainer.style.display = 'block';
-
-      // Add event listeners to newly created buttons
-      document.querySelectorAll('.subscribe-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-          const topicName = this.getAttribute('data-topic');
-          console.log("Requesting subscription to:", topicName);
-          socket.emit('subscribe_new_gps_topic', { topic: topicName });
-        });
-      });
-
-      document.querySelectorAll('.unsubscribe-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
-          const topicName = this.getAttribute('data-topic');
-          console.log("Requesting unsubscription from:", topicName);
-          socket.emit('unsubscribe_gps_topic', { topic: topicName });
-        });
-      });
     });
   });
 

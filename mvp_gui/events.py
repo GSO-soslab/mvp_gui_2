@@ -26,6 +26,12 @@ def handle_connect():
     if last_vehicle_pose:
         sio_server.emit('vehicle_pose_update', last_vehicle_pose, to=request.sid)
 
+    # Send cached GPS topics if they exist
+    cached_gps_topics = current_app.config.get('_gps_topics_cache', [])
+    if cached_gps_topics:
+        sio_server.emit('gps_topics_discovered', {'topics': cached_gps_topics}, to=request.sid)
+
+
 @sio_server.on('disconnect')
 def handle_disconnect():
     """Logs when a client disconnects."""
@@ -94,8 +100,10 @@ def handle_update_launch_keys(data):
 def handle_gps_topics_discovered(data):
     """
     Relay the list of discovered GPS topics from the ROS node
-    to all browser clients in the room.
+    to all browser clients in the room and cache it.
     """
+    topics = data.get('topics', [])
+    current_app.config['_gps_topics_cache'] = topics
     sio_server.emit('gps_topics_discovered', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('gps_topic_subscribed')

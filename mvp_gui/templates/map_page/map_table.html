@@ -134,8 +134,6 @@
 
     // --- Client-Side Data Stores ---
     let vehicleHistory = [];
-    let topsideHistory = [];
-    let secondaryHistory = [];
     let currentVehiclePose = null; // Holds the most recent pose data for runtime use
     let lastPublishedPath = []; // Holds the most recent path data for runtime use
     const editableWaypointsData = {{ items_jsn | safe }};
@@ -159,15 +157,12 @@
         const stateToSave = {
             isOnline: isOnlineMap,
             vehicleHistory: vehicleHistory,
-            topsideHistory: topsideHistory,
-            secondaryHistory: secondaryHistory,
+            dynamicGPSHistories: dynamicGPSHistories,
         };
-
         if (map && isMapInitialized) {
             stateToSave.zoom = map.getZoom();
             stateToSave.center = map.getCenter();
         }
-
         sessionStorage.setItem(MAP_STATE_KEY, JSON.stringify(stateToSave));
     }
 
@@ -179,8 +174,7 @@
                 isOnlineMap = savedState.isOnline ?? false; // Default to offline if not in saved state
                 // Restore history trails
                 vehicleHistory = savedState.vehicleHistory || [];
-                topsideHistory = savedState.topsideHistory || [];
-                secondaryHistory = savedState.secondaryHistory || [];
+                dynamicGPSHistories = savedState.dynamicGPSHistories || {};
 
                 // Return camera position if it exists
                 if (savedState.center) {
@@ -267,10 +261,8 @@
             '#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FF33A1',
             '#33FFF3', '#F3FF33', '#A833FF', '#FF8C33', '#33FF8C'
         ];
-
         // Filter out excluded colors
         const availableColors = colors.filter(color => !excludeColors.includes(color));
-
         // Return a random available color or a random color if all are taken
         if (availableColors.length > 0) {
             return availableColors[Math.floor(Math.random() * availableColors.length)];
@@ -321,37 +313,27 @@
                     "source": "offline-raster-tiles"
                 }]
             };
-
         map = new maplibregl.Map({
             container: 'map',
             style: mapStyle,
             center: centerCoords,
             zoom: zoomLevel
         });
-
         map.on('moveend', saveMapState);
         map.on('zoomend', saveMapState);
-
         map.on('load', () => {
             // This code adds the sources and layers for the dynamic vector data (trails, paths).
             // It will work on top of both online and offline base maps.
             map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.7 } });
 
-            map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 2, 'line-opacity': 0.5 } });
-
-            map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 2, 'line-opacity': 0.5 } });
-
             map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: EDITABLE_PATH_STYLE_DEFAULT });
 
             map.addSource('published-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
-
+            
             isMapInitialized = true;
-
             // Redraw everything that might have been restored or received while map was loading
             createEditableWaypointMarkers();
             redrawAllFromState();
@@ -364,7 +346,6 @@
         editableWaypointsData.forEach(item => {
             const el = createEditableWaypointMarkerElement(item);
             const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom' }).setLngLat([item.lon, item.lat]).addTo(map);
-
             marker.on('dragstart', () => {
                 el.classList.add('marker-dragging');
                 if (map.getLayer('editable-waypoints-route-layer')) {
@@ -373,7 +354,6 @@
                     });
                 }
             });
-
             marker.on('drag', () => {
                 const coords = marker.getLngLat();
                 const draggedWaypoint = editableWaypointsData.find(w => w.id === item.id);
@@ -383,7 +363,6 @@
                 }
                 updateEditablePathLine();
             });
-
             marker.on('dragend', () => {
                 el.classList.remove('marker-dragging');
                 if (map.getLayer('editable-waypoints-route-layer')) {
@@ -402,10 +381,9 @@
     function redrawAllFromState() {
         if (!isMapInitialized) return;
         if (currentVehiclePose) updateVehicle(currentVehiclePose);
-
         // Redraw trails from restored history
         redrawAllTrails();
-
+        redrawDynamicGpsTrails();
         // Redraw paths using live data
         updateEditablePathLine();
         drawPublishedPath();
@@ -467,47 +445,39 @@
         if (!map || !data || data.lon == null || data.lat == null) {
             return;
         }
-
         // Initialize color and history for new topics. This is safe to do before the map is ready.
         if (!dynamicGPSColors[topicName]) {
             const usedColors = Object.values(dynamicGPSColors);
             dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
             dynamicGPSHistories[topicName] = [];
         }
-
         const lngLat = [data.lon, data.lat];
-
         // Update history. This is also safe to do before map is ready.
         dynamicGPSHistories[topicName].push(lngLat);
         if (dynamicGPSHistories[topicName].length > MAX_HISTORY_POINTS) {
             dynamicGPSHistories[topicName].shift();
         }
-
         // --- All subsequent operations modify the map and must wait for it to be initialized ---
         if (!isMapInitialized) {
             return;
         }
-
         // Create marker if it doesn't exist, otherwise update its position.
         if (!dynamicGPSMarkers[topicName]) {
             dynamicGPSMarkers[topicName] = createDynamicGPSMarker(dynamicGPSColors[topicName], lngLat);
         } else {
             dynamicGPSMarkers[topicName].setLngLat(lngLat);
         }
-
         // Update trail on map
         // Sanitize topic name to create a valid ID for MapLibre sources/layers
         const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
         const sourceId = `gps-trail-${sanitizedTopicName}`;
         const layerId = `gps-trail-layer-${sanitizedTopicName}`;
-
         // Create source and layer if they don't exist
         if (!map.getSource(sourceId)) {
             map.addSource(sourceId, {
                 type: 'geojson',
                 data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
             });
-
             map.addLayer({
                 id: layerId,
                 type: 'line',
@@ -519,7 +489,6 @@
                 }
             });
         }
-
         // Update trail data
         map.getSource(sourceId).setData({
             type: 'Feature',
@@ -530,6 +499,51 @@
         });
     }
 
+    function redrawDynamicGpsTrails() {
+        if (!isMapInitialized) {
+            return;
+        }
+        for (const topicName in dynamicGPSHistories) {
+            if (dynamicGPSHistories.hasOwnProperty(topicName)) {
+                const history = dynamicGPSHistories[topicName];
+                // Sanitize topic name to create a valid ID for MapLibre sources/layers
+                const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+                const sourceId = `gps-trail-${sanitizedTopicName}`;
+                const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+                // Ensure color exists for this topic
+                if (!dynamicGPSColors[topicName]) {
+                    const usedColors = Object.values(dynamicGPSColors);
+                    dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
+                }
+                // Create source and layer if they don't exist
+                if (!map.getSource(sourceId)) {
+                    map.addSource(sourceId, {
+                        type: 'geojson',
+                        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+                    });
+                    map.addLayer({
+                        id: layerId,
+                        type: 'line',
+                        source: sourceId,
+                        paint: {
+                            'line-color': dynamicGPSColors[topicName],
+                            'line-width': 2,
+                            'line-opacity': 0.5
+                        }
+                    });
+                }
+                // Update trail data
+                map.getSource(sourceId).setData({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: history || []
+                    }
+                });
+            }
+        }
+    }
+
     function drawPublishedPath() {
         if (!isMapInitialized) return;
         // Clear old markers
@@ -537,15 +551,12 @@
         publishedWaypointMarkers = [];
         publishedAltitudeMarkers.forEach(m => m.remove());
         publishedAltitudeMarkers = [];
-
         // This is the GeoPath data from ROS: [vehicle_pose, wp1_ros, wp2_ros, ...]
         const canonicalPath = lastPublishedPath || [];
-
         if (canonicalPath.length === 0) {
             map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
             return;
         }
-
         // 1. Create markers for each waypoint *using the coordinates from the GeoPath message*.
         canonicalPath.forEach((point, index) => {
             publishedWaypointMarkers.push(new maplibregl.Marker({
@@ -553,14 +564,11 @@
                 anchor: 'bottom'
             }).setLngLat([point.lon, point.lat]).addTo(map));
         });
-
         // 2. The line's path points are also directly from the GeoPath message.
         let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge }));
-
         // 3. Set the data for the line layer on the map.
         const lineCoords = linePoints.map(p => [p.lon, p.lat]);
         map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
-
         // 4. Create altitude labels for each segment of the complete line.
         for (let i = 1; i < linePoints.length; i++) {
             const p1 = { lat: linePoints[i - 1].lat, lon: linePoints[i - 1].lon };
@@ -572,8 +580,6 @@
     function redrawAllTrails() {
         if (!isMapInitialized) return;
         map.getSource('vehicle-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: vehicleHistory } });
-        map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsideHistory } });
-        map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryHistory } });
     }
 
     // --- WebSocket Event Handlers ---
@@ -581,34 +587,12 @@
         if (!data || data.lon === undefined || data.lat === undefined) return;
         currentVehiclePose = { ...data };
         updateHistory(vehicleHistory, data);
-
         if (!map) {
             initializeMap([data.lon, data.lat]);
         }
-
         if (isMapInitialized) {
             updateVehicle(data);
             redrawAllTrails();
-        }
-    });
-
-    // These handlers just add to history and place a marker.
-    // They are simpler because they don't trigger a full redraw.
-    socket.on('topside_pose_update', (data) => {
-        if (!data || data.lon === undefined || data.lat === undefined) return;
-        updateHistory(topsideHistory, data);
-        if (isMapInitialized) {
-            updateTopside(data);
-            map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsideHistory } });
-        }
-    });
-
-    socket.on('secondary_pose_update', (data) => {
-        if (!data || data.lon === undefined || data.lat === undefined) return;
-        updateHistory(secondaryHistory, data);
-        if (isMapInitialized) {
-            updateSecondary(data);
-            map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryHistory } });
         }
     });
 
@@ -618,41 +602,16 @@
             console.error("Received incomplete dynamic_gps_update:", data);
             return;
         }
-
         // Initialize map if it hasn't been, using the first valid coordinates we receive.
         // This ensures the `map` object exists before `updateDynamicGPS` is called.
         if (!map && data.data.lon != null && data.data.lat != null) {
             initializeMap([data.data.lon, data.data.lat]);
         }
-
         // updateDynamicGPS has its own internal checks for map state and data validity.
         updateDynamicGPS(data.topic, data.data);
     });
 
     socket.on('published_path_update', (data) => {
-        // // --- DEBUG LOGGING FOR COORDINATE COMPARISON ---
-        // console.log("--- Comparing Waypoint Data on Publish ---");
-
-        // // Log the "editable" data that was sent
-        // console.log("==> SENT (Editable Waypoints):");
-        // editableWaypointsData.forEach(item => {
-        //     console.log(`  ID ${item.id}: lat=${item.lat}, lon=${item.lon}`);
-        // });
-
-        // // Log the "published" data that was received back from ROS
-        // console.log("==> RECEIVED (Published Path from ROS):");
-        // const receivedPath = data || [];
-        // if (receivedPath.length > 1) {
-        //     // Start from index 1 to skip vehicle pose and align with editable waypoints
-        //     receivedPath.slice(1).forEach((point, index) => {
-        //         // The corresponding editable waypoint ID is (index + 1)
-        //         console.log(`  Waypoint #${index + 1}: lat=${point.lat}, lon=${point.lon}`);
-        //     });
-        // } else {
-        //     console.log("  Received path has no waypoints to compare.");
-        // }
-        // console.log("------------------------------------------");
-
         lastPublishedPath = data || [];
         if (isMapInitialized) {
             drawPublishedPath();
@@ -663,27 +622,22 @@
     socket.on('gps_topic_unsubscribed', (data) => {
         const topicName = data.topic;
         console.log(`Received unsubscription confirmation for ${topicName}. Removing from map.`);
-
         if (!topicName || !map || !isMapInitialized) return;
-
         // Remove marker
         if (dynamicGPSMarkers[topicName]) {
             dynamicGPSMarkers[topicName].remove();
             delete dynamicGPSMarkers[topicName];
         }
-
         // Remove trail layer and source
         const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
         const sourceId = `gps-trail-${sanitizedTopicName}`;
         const layerId = `gps-trail-layer-${sanitizedTopicName}`;
-
         if (map.getLayer(layerId)) {
             map.removeLayer(layerId);
         }
         if (map.getSource(sourceId)) {
             map.removeSource(sourceId);
         }
-
         // Clean up data stores
         delete dynamicGPSHistories[topicName];
         delete dynamicGPSColors[topicName];
@@ -701,7 +655,6 @@
             // This case is handled inside initializeMap, but in practice the pose
             // arrives almost instantly from the server cache.
         }
-
         document.getElementById('map-switch-button').addEventListener('click', () => {
             if (!map) return;
             isOnlineMap = !isOnlineMap; // Toggle the map state
@@ -714,20 +667,23 @@
             editableWaypointMarkers = [];
             editableAltitudeMarkers = [];
             publishedAltitudeMarkers = [];
+            dynamicGPSMarkers = {};
             isMapInitialized = false;
             // Re-initialize using the last known vehicle pose if available, otherwise the old center.
             const initCoords = currentVehiclePose ? [currentVehiclePose.lon, currentVehiclePose.lat] : [center.lng, center.lat];
             initializeMap(initCoords, zoom);
         });
-
         document.addEventListener('clear-history-trails', () => {
             console.log("Clear history trails event received.");
             vehicleHistory = [];
-            topsideHistory = [];
-            secondaryHistory = [];
+            // Also clear all dynamic GPS history trails
+            Object.keys(dynamicGPSHistories).forEach(topic => {
+                dynamicGPSHistories[topic] = [];
+            });
 
             if (isMapInitialized) {
                 redrawAllTrails();
+                redrawDynamicGpsTrails();
             }
             saveMapState();
         });

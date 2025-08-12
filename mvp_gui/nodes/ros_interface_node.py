@@ -16,8 +16,6 @@ from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
 from std_srvs.srv import SetBool
 from rcl_interfaces.srv import GetParameters
-from rclpy.topic_endpoint_info import TopicEndpointInfo
-import json
 
 class RosInterfaceNode(Node):
     def __init__(self, sio_client):
@@ -93,7 +91,6 @@ class RosInterfaceNode(Node):
                     'type': 'sensor_msgs/msg/NavSatFix',
                     'subscribed': is_subscribed
                 })
-        
         return navsatfix_topics
 
     def setup_ros_communications(self):
@@ -125,8 +122,10 @@ class RosInterfaceNode(Node):
         self.pub_waypoints_client = self.create_client(SendWaypoints, self.get_service('pub_waypoints_service'), callback_group=self.callback_group)
 
     def try_fetch_and_setup_dynamic_clients(self):
-        if self.param_fetch_timer: self.param_fetch_timer.cancel()
-        if self.dynamic_clients_configured: return
+        if self.param_fetch_timer: 
+            self.param_fetch_timer.cancel()
+        if self.dynamic_clients_configured: 
+            return
 
         self.get_logger().info(f"Attempting to fetch parameters from '{self.c2_commander_node_name}'...")
         param_client = self.create_client(GetParameters, f'{self.c2_commander_node_name}/get_parameters', callback_group=self.callback_group)
@@ -241,7 +240,8 @@ class RosInterfaceNode(Node):
         self.sio.emit('published_path_update', path_data)
 
     def roslaunch_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         statuses = list(msg.data)
         if len(statuses) != len(self.launch_keys):
             self.get_logger().warning(f"Launch status size ({len(statuses)}) != launch files ({len(self.launch_keys)}).")
@@ -249,27 +249,33 @@ class RosInterfaceNode(Node):
         self.sio.emit('launch_status_update', {'keys': self.launch_keys, 'statuses': statuses})
 
     def power_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('power_update', {'keys': self.gpio_device_keys,  'statuses': list(msg.data)})
 
     def power_info_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('power_info_update', {'voltage': msg.data[0], 'current': msg.data[1]})
 
     def computer_info_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('computer_info_update', {'mem_usage': msg.data[0], 'cpu_temp': msg.data[1], 'cpu_usage': msg.data[2]})
 
     def helm_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('helm_state_update', {'current_state': msg.name, 'transitions': msg.transitions})
 
     def controller_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('controller_state_update', {'state': msg.data})
 
     def synchronized_pose_callback(self, odom_msg, geo_pose_msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         q = geo_pose_msg.pose.orientation
         euler = euler_from_quaternion([q.x, q.y, q.z, q.w])
         pose_data = {
@@ -286,9 +292,7 @@ class RosInterfaceNode(Node):
         if not self.sio.connected: 
             return
         gps_data = {
-            "lat": gps_msg.latitude, 
-            "lon": gps_msg.longitude, 
-            "alt": gps_msg.altitude, 
+            "lat": gps_msg.latitude, "lon": gps_msg.longitude, "alt": gps_msg.altitude, 
             'pos_cov': list(gps_msg.position_covariance) # Convert ndarray to a JSON-serializable list
         }
         # Process your message here and emit to GUI
