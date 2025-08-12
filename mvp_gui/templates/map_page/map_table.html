@@ -1,14 +1,16 @@
 <!-- Add a button to switch map sources -->
 <button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online/Offline Map</button>
 
-<div id="map" class="map"></div>
+<div style="position: relative;">
+    <div id="map" class="map"></div>
 
-<!-- LEGEND -->
-<div id="map-legend" class="map-legend">
-    <h4>Legend</h4>
-    <ul id="legend-items">
-        <!-- Dynamically populated -->
-    </ul>
+    <!-- LEGEND -->
+    <div id="map-legend" class="map-legend">
+        <h4>Legend</h4>
+        <ul id="legend-items">
+            <!-- Dynamically populated -->
+        </ul>
+    </div>
 </div>
 
 <style>
@@ -95,7 +97,7 @@
     .arrow-marker {
         width: 40px;
         height: 40px;
-        background: url('{{ url_for('static', filename='icons/white_arrow.png') }}') no-repeat center center;
+        background: url('{{ url_for(' static', filename=' icons/white_arrow.png') }}') no-repeat center center;
         background-size: contain;
         transform-origin: center;
     }
@@ -109,7 +111,7 @@
     .groundstation-marker {
         width: 45px;
         height: 45px;
-        background-image: url('{{ url_for('static', filename='icons/ground_station_icon.png') }}');
+        background-image: url('{{ url_for(' static', filename=' icons/ground_station_icon.png') }}');
     }
 
     .secondary-marker {
@@ -123,23 +125,28 @@
     .map-legend {
         position: absolute;
         top: 10px;
-        left: 10px;
-        background: rgba(40, 40, 40, 0.85);
+        right: 10px;
+        /* Changed from left */
+        background: rgba(40, 40, 40, 0.9);
         color: #fff;
-        padding: 10px 15px;
+        padding: 8px 12px;
+        /* Made smaller */
         border-radius: 5px;
         z-index: 1000;
         font-family: Arial, sans-serif;
-        max-width: 250px;
+        max-width: 220px;
+        /* Made smaller */
         border: 1px solid #555;
     }
 
     .map-legend h4 {
         margin-top: 0;
-        margin-bottom: 10px;
-        font-size: 16px;
+        margin-bottom: 8px;
+        /* Made smaller */
+        font-size: 14px;
+        /* Made smaller */
         border-bottom: 1px solid #666;
-        padding-bottom: 5px;
+        padding-bottom: 4px;
     }
 
     .map-legend ul {
@@ -149,16 +156,19 @@
     }
 
     .map-legend li {
-        margin-bottom: 5px;
+        margin-bottom: 4px;
+        /* Made smaller */
         display: flex;
         align-items: center;
         font-size: 12px;
     }
 
     .legend-color-box {
-        width: 20px;
+        width: 18px;
+        /* Made smaller */
         height: 10px;
-        margin-right: 10px;
+        margin-right: 8px;
+        /* Made smaller */
         border: 1px solid #ccc;
     }
 </style>
@@ -244,6 +254,41 @@
     }
 
     // --- Helper Functions ---
+    function getShortTopicName(topicName) {
+        if (!topicName) return '';
+
+        // Split by '/' and filter out empty strings that result from leading/trailing slashes
+        const parts = topicName.split('/').filter(p => p.length > 0);
+
+        // If there are 2 or fewer parts, return the original structure with a leading slash.
+        // This handles cases like "/gps/fix" which should remain "/gps/fix".
+        if (parts.length <= 2) {
+            return '/' + parts.join('/');
+        }
+
+        // If there are 3 or more parts, apply the new shortening logic.
+        // e.g., /mvp2_test_robot/remote/id_2/odometry/navsatfix -> /mvp2/odo/nav
+
+        // 1. Get namespace_shorthand from the first part.
+        // e.g., "mvp2_test_robot" -> "mvp2", "alpha_rise" -> "alpha", "xy" -> "xy"
+        const namespacePart = parts[0];
+        const underscoreIndex = namespacePart.indexOf('_');
+        const namespaceShorthand = (underscoreIndex !== -1)
+            ? namespacePart.substring(0, underscoreIndex)
+            : namespacePart;
+
+        // 2. Get the last two parts and shorten them to their first 3 letters.
+        // e.g., "odometry" -> "odo", "navsatfix" -> "nav"
+        const lastPart = parts[parts.length - 1];
+        const secondLastPart = parts[parts.length - 2];
+
+        const lastShort = lastPart.substring(0, 3);
+        const secondLastShort = secondLastPart.substring(0, 3);
+
+        // 3. Combine them in the format /namespace_shorthand/last_2_short/last_1_short
+        return `/${namespaceShorthand}/${secondLastShort}/${lastShort}`;
+    }
+
     function updateLegend() {
         const legendItemsContainer = document.getElementById('legend-items');
         if (!legendItemsContainer) return;
@@ -267,8 +312,9 @@
         for (const topicName in dynamicGPSColors) {
             if (dynamicGPSColors.hasOwnProperty(topicName)) {
                 const color = dynamicGPSColors[topicName];
+                const displayName = getShortTopicName(topicName);
                 const li = document.createElement('li');
-                li.innerHTML = `<span class="legend-color-box" style="background-color: ${color};"></span> ${topicName}`;
+                li.innerHTML = `<span class="legend-color-box" style="background-color: ${color};"></span> ${displayName}`;
                 legendItemsContainer.appendChild(li);
             }
         }
