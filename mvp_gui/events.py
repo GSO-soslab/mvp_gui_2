@@ -9,6 +9,7 @@ BROADCAST_ROOM = 'all_clients_room'
 # --- Server-side cache for stateful data ---
 last_published_path = []
 last_vehicle_pose = None # Cache for vehicle pose
+last_launch_status = None # Cache for launch status
 
 # --- Handlers for built-in events ---
 @sio_server.on('connect')
@@ -25,6 +26,23 @@ def handle_connect():
         sio_server.emit('published_path_update', last_published_path, to=request.sid)
     if last_vehicle_pose:
         sio_server.emit('vehicle_pose_update', last_vehicle_pose, to=request.sid)
+
+    # Send cached GPS topics if they exist
+    cached_gps_topics = current_app.config.get('_gps_topics_cache', [])
+    if cached_gps_topics:
+        sio_server.emit('gps_topics_discovered', {'topics': cached_gps_topics}, to=request.sid)
+
+    # Send cached launch keys if they exist
+    cached_launch_keys = current_app.config.get('_launch_keys_cache', [])
+    if cached_launch_keys:
+        print(f"Sending cached launch keys to new client {request.sid}")
+        sio_server.emit('update_launch_keys', {'keys': cached_launch_keys}, to=request.sid)
+        
+    # Send cached launch status if it exists
+    if last_launch_status:
+        print(f"Sending cached launch status to new client {request.sid}")
+        sio_server.emit('launch_status_update', last_launch_status, to=request.sid)
+
 
 @sio_server.on('disconnect')
 def handle_disconnect():
@@ -69,7 +87,9 @@ def handle_controller_state_update(data):
 
 @sio_server.on('launch_status_update')
 def handle_launch_status_update(data):
-    """Relay launch status from ROS node to all browser clients in the room."""
+    """Relay launch status from ROS node to all browser clients in the room and cache it."""
+    global last_launch_status
+    last_launch_status = data # Cache the latest status
     sio_server.emit('launch_status_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
     
 @sio_server.on('published_path_update')
@@ -83,12 +103,40 @@ def handle_published_path_update(data):
 def handle_update_launch_keys(data):
     """
     Event handler for when the ROS node sends the list of launch files.
-    This updates the server's cache in the Flask app config.
+    This updates the server's cache in the Flask app config and relays the update
+    to all connected browser clients.
     """
     keys = data.get('keys', [])
-    print(f"Received launch key update from ROS node: {keys}")
+    print(f"Received launch key update from ROS node, relaying to browsers: {keys}")
     # Update the cache stored in the application config
     current_app.config['_launch_keys_cache'] = keys
+    # Relay this update to all browser clients in the room.
+    sio_server.emit('update_launch_keys', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('gps_topics_discovered')
+def handle_gps_topics_discovered(data):
+    """
+    Relay the list of discovered GPS topics from the ROS node
+    to all browser clients in the room and cache it.
+    """
+    topics = data.get('topics', [])
+    current_app.config['_gps_topics_cache'] = topics
+    sio_server.emit('gps_topics_discovered', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('gps_topic_subscribed')
+def handle_gps_topic_subscribed(data):
+    """Relay subscription confirmation from ROS node to all browser clients."""
+    sio_server.emit('gps_topic_subscribed', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('gps_topic_unsubscribed')
+def handle_gps_topic_unsubscribed(data):
+    """Relay unsubscription confirmation from ROS node to all browser clients."""
+    sio_server.emit('gps_topic_unsubscribed', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('dynamic_gps_update')
+def handle_dynamic_gps_update(data):
+    """Relay dynamic GPS data from ROS node to all browser clients."""
+    sio_server.emit('dynamic_gps_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
     
 # --- Handlers for events FROM browsers ---
 
@@ -113,3 +161,26 @@ def handle_publish_waypoints_request():
         waypoints_payload = [{"lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} for w in waypoints]
         # Emit to the room. The ROS node is in the room and will receive this.
         sio_server.emit('ros_action', {'action': 'publish_waypoints', 'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
+
+@sio_server.on('discover_gps_topics')
+def handle_discover_gps_topics(data):
+    """
+    A browser client requested to discover GPS topics.
+    Relay this request to the ROS node which will handle the discovery
+    and respond with the list of available topics.
+    """
+    print(f"Browser sid={request.sid} requested GPS topic discovery.")
+    # Emit to the room. The ROS node is in the room and will receive this.
+    sio_server.emit('discover_gps_topics', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('subscribe_new_gps_topic')
+def handle_subscribe_new_gps_topic(data):
+    """Relay subscribe request from browser to ROS node."""
+    print(f"Relaying subscribe request for GPS topic: {data}")
+    sio_server.emit('subscribe_new_gps_topic', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('unsubscribe_gps_topic')
+def handle_unsubscribe_gps_topic(data):
+    """Relay unsubscribe request from browser to ROS node."""
+    print(f"Relaying unsubscribe request for GPS topic: {data}")
+    sio_server.emit('unsubscribe_gps_topic', data, to=BROADCAST_ROOM, skip_sid=request.sid)

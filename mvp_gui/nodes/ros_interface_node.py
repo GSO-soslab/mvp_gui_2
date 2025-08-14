@@ -1,4 +1,3 @@
-# mvp_gui/nodes/ros_interface_node.py
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
@@ -10,6 +9,7 @@ import numpy as np
 import message_filters
 from nav_msgs.msg import Odometry
 from geographic_msgs.msg import GeoPoseStamped
+from sensor_msgs.msg import NavSatFix
 from mvp_msgs.msg import Waypoint, Waypoints, HelmState
 from std_msgs.msg import Float32MultiArray, Bool, Int16MultiArray
 from tf_transformations import euler_from_quaternion
@@ -56,6 +56,9 @@ class RosInterfaceNode(Node):
         self.launch_keys = []
         self.gpio_device_keys = []
 
+        # To track dynamically added subscribers
+        self.dynamic_subscribers = {}
+
         self.setup_ros_communications()
         self.setup_sio_handlers()
 
@@ -71,6 +74,24 @@ class RosInterfaceNode(Node):
 
     def get_service(self, key):
         return self.service_ns + self.get_parameter(key).value
+
+    def discover_navsatfix_topics(self):
+        """Discover all topics of type sensor_msgs/msg/NavSatFix"""
+        # Get all topic names and types
+        topic_names_and_types = self.get_topic_names_and_types()
+        
+        # Filter for NavSatFix topics
+        navsatfix_topics = []
+        for name, types in topic_names_and_types:
+            if 'sensor_msgs/msg/NavSatFix' in types:
+                # Check if we're already subscribed to this topic
+                is_subscribed = name in self.dynamic_subscribers
+                navsatfix_topics.append({
+                    'name': name,
+                    'type': 'sensor_msgs/msg/NavSatFix',
+                    'subscribed': is_subscribed
+                })
+        return navsatfix_topics
 
     def setup_ros_communications(self):
         self.callback_group = ReentrantCallbackGroup()
@@ -101,8 +122,10 @@ class RosInterfaceNode(Node):
         self.pub_waypoints_client = self.create_client(SendWaypoints, self.get_service('pub_waypoints_service'), callback_group=self.callback_group)
 
     def try_fetch_and_setup_dynamic_clients(self):
-        if self.param_fetch_timer: self.param_fetch_timer.cancel()
-        if self.dynamic_clients_configured: return
+        if self.param_fetch_timer: 
+            self.param_fetch_timer.cancel()
+        if self.dynamic_clients_configured: 
+            return
 
         self.get_logger().info(f"Attempting to fetch parameters from '{self.c2_commander_node_name}'...")
         param_client = self.create_client(GetParameters, f'{self.c2_commander_node_name}/get_parameters', callback_group=self.callback_group)
@@ -146,6 +169,33 @@ class RosInterfaceNode(Node):
             self.get_logger().error(f"Failed to process parameter fetch result: {e}. Retrying in 5s...")
             self.param_fetch_timer = self.create_timer(5.0, self.try_fetch_and_setup_dynamic_clients)
 
+    def create_dynamic_gps_subscriber(self, topic_name):
+        """Create a new GPS subscriber dynamically"""
+        # Check if subscriber already exists
+        if topic_name in self.dynamic_subscribers:
+            self.get_logger().warn(f"Subscriber for {topic_name} already exists")
+            return None
+        
+        # Create a closure to capture the topic_name
+        def make_callback(topic):
+            def callback(msg):
+                self.dynamic_gps_callback(msg, topic)
+            return callback
+        
+        # Create subscriber with the closure
+        subscriber = self.create_subscription(
+            NavSatFix, 
+            topic_name, 
+            make_callback(topic_name), 
+            10, 
+            callback_group=self.callback_group
+        )
+        
+        # Store reference to prevent garbage collection
+        self.dynamic_subscribers[topic_name] = subscriber
+        self.get_logger().info(f"Created new GPS subscriber for topic: {topic_name}")
+        return subscriber
+
     def setup_sio_handlers(self):
         @self.sio.on('ros_action')
         def handle_ros_action(data):
@@ -160,6 +210,29 @@ class RosInterfaceNode(Node):
             }
             if action in actions:
                 actions[action](data)
+        
+        @self.sio.on('subscribe_new_gps_topic')
+        def handle_subscribe_new_gps_topic(data):
+            topic_name = data.get('topic')
+            if self.create_dynamic_gps_subscriber(topic_name):
+                self.get_logger().info(f"Successfully subscribed to {topic_name}. Notifying client.")
+                self.sio.emit('gps_topic_subscribed', {'topic': topic_name})
+        
+        @self.sio.on('discover_gps_topics')
+        def handle_discover_gps_topics(data):
+            topics = self.discover_navsatfix_topics()
+            self.sio.emit('gps_topics_discovered', {'topics': topics})
+        
+        @self.sio.on('unsubscribe_gps_topic')
+        def handle_unsubscribe_gps_topic(data):
+            topic_name = data.get('topic')
+            if topic_name in self.dynamic_subscribers:
+                # Pop the subscriber object from our dict and destroy it
+                subscriber_to_destroy = self.dynamic_subscribers.pop(topic_name)
+                self.destroy_subscription(subscriber_to_destroy)
+                self.get_logger().info(f"Unsubscribed from and destroyed subscription for GPS topic: {topic_name}")
+                # Notify client that unsubscription was successful
+                self.sio.emit('gps_topic_unsubscribed', {'topic': topic_name})
 
     def survey_geopath_callback(self, msg):
         if not self.sio.connected: return
@@ -167,7 +240,8 @@ class RosInterfaceNode(Node):
         self.sio.emit('published_path_update', path_data)
 
     def roslaunch_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         statuses = list(msg.data)
         if len(statuses) != len(self.launch_keys):
             self.get_logger().warning(f"Launch status size ({len(statuses)}) != launch files ({len(self.launch_keys)}).")
@@ -175,27 +249,33 @@ class RosInterfaceNode(Node):
         self.sio.emit('launch_status_update', {'keys': self.launch_keys, 'statuses': statuses})
 
     def power_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('power_update', {'keys': self.gpio_device_keys,  'statuses': list(msg.data)})
 
     def power_info_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('power_info_update', {'voltage': msg.data[0], 'current': msg.data[1]})
 
     def computer_info_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('computer_info_update', {'mem_usage': msg.data[0], 'cpu_temp': msg.data[1], 'cpu_usage': msg.data[2]})
 
     def helm_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('helm_state_update', {'current_state': msg.name, 'transitions': msg.transitions})
 
     def controller_state_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         self.sio.emit('controller_state_update', {'state': msg.data})
 
     def synchronized_pose_callback(self, odom_msg, geo_pose_msg):
-        if not self.sio.connected: return
+        if not self.sio.connected: 
+            return
         q = geo_pose_msg.pose.orientation
         euler = euler_from_quaternion([q.x, q.y, q.z, q.w])
         pose_data = {
@@ -206,6 +286,17 @@ class RosInterfaceNode(Node):
             "p": np.rad2deg(odom_msg.twist.twist.angular.x), "q": np.rad2deg(odom_msg.twist.twist.angular.y), "r": np.rad2deg(odom_msg.twist.twist.angular.z),
         }
         self.sio.emit('vehicle_pose_update', pose_data)
+
+    def dynamic_gps_callback(self, gps_msg, topic_name):
+        """Generic callback for dynamic subscribers"""
+        if not self.sio.connected: 
+            return
+        gps_data = {
+            "lat": gps_msg.latitude, "lon": gps_msg.longitude, "alt": gps_msg.altitude, 
+            'pos_cov': list(gps_msg.position_covariance) # Convert ndarray to a JSON-serializable list
+        }
+        # Process your message here and emit to GUI
+        self.sio.emit('dynamic_gps_update', {'topic': topic_name, 'data': gps_data})
 
     def _check_service(self, client, timeout_sec=1.0):
         if not client.wait_for_service(timeout_sec=timeout_sec): 

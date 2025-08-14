@@ -1,9 +1,24 @@
 <!-- Add a button to switch map sources -->
 <button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online/Offline Map</button>
 
-<div id="map" class="map"></div>
+<div style="position: relative;">
+    <div id="map" class="map"></div>
+
+    <!-- LEGEND -->
+    <div id="map-legend" class="map-legend">
+        <h4>Legend</h4>
+        <ul id="legend-items">
+            <!-- Dynamically populated -->
+        </ul>
+    </div>
+</div>
 
 <style>
+    .map {
+        height: 75vh;
+        /* Set map to be 75% of the viewport height */
+    }
+
     /* --- Styles for Published Waypoints (Yellow Triangles) --- */
     .published-wpt-marker {
         display: flex;
@@ -110,6 +125,57 @@
         background-color: blue;
         border-radius: 50%;
     }
+
+    /* --- Legend Styles --- */
+    .map-legend {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        /* Changed from left */
+        background: rgba(40, 40, 40, 0.9);
+        color: #fff;
+        padding: 8px 12px;
+        /* Made smaller */
+        border-radius: 5px;
+        z-index: 1000;
+        font-family: Arial, sans-serif;
+        max-width: 220px;
+        /* Made smaller */
+        border: 1px solid #555;
+    }
+
+    .map-legend h4 {
+        margin-top: 0;
+        margin-bottom: 8px;
+        /* Made smaller */
+        font-size: 14px;
+        /* Made smaller */
+        border-bottom: 1px solid #666;
+        padding-bottom: 4px;
+    }
+
+    .map-legend ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .map-legend li {
+        margin-bottom: 4px;
+        /* Made smaller */
+        display: flex;
+        align-items: center;
+        font-size: 12px;
+    }
+
+    .legend-color-box {
+        width: 18px;
+        /* Made smaller */
+        height: 10px;
+        margin-right: 8px;
+        /* Made smaller */
+        border: 1px solid #ccc;
+    }
 </style>
 
 <script>
@@ -134,8 +200,6 @@
 
     // --- Client-Side Data Stores ---
     let vehicleHistory = [];
-    let topsideHistory = [];
-    let secondaryHistory = [];
     let currentVehiclePose = null; // Holds the most recent pose data for runtime use
     let lastPublishedPath = []; // Holds the most recent path data for runtime use
     const editableWaypointsData = {{ items_jsn | safe }};
@@ -148,21 +212,24 @@
     let editableAltitudeMarkers = [];
     let publishedAltitudeMarkers = [];
 
+    // --- Dynamic GPS ---
+    let dynamicGPSMarkers = {}; // Store markers for each GPS topic
+    let dynamicGPSHistories = {}; // Store histories for each GPS topic
+    let dynamicGPSColors = {}; // Store colors for each GPS topic
+
     // --- State Persistence Functions ---
     function saveMapState() {
-        // We only save the view settings and history trails, not live data.
+        // We only save the view settings, history trails, and colors.
         const stateToSave = {
             isOnline: isOnlineMap,
             vehicleHistory: vehicleHistory,
-            topsideHistory: topsideHistory,
-            secondaryHistory: secondaryHistory,
+            dynamicGPSHistories: dynamicGPSHistories,
+            dynamicGPSColors: dynamicGPSColors,
         };
-
         if (map && isMapInitialized) {
             stateToSave.zoom = map.getZoom();
             stateToSave.center = map.getCenter();
         }
-
         sessionStorage.setItem(MAP_STATE_KEY, JSON.stringify(stateToSave));
     }
 
@@ -172,10 +239,10 @@
             try {
                 const savedState = JSON.parse(savedStateJSON);
                 isOnlineMap = savedState.isOnline ?? false; // Default to offline if not in saved state
-                // Restore history trails
+                // Restore history trails and colors
                 vehicleHistory = savedState.vehicleHistory || [];
-                topsideHistory = savedState.topsideHistory || [];
-                secondaryHistory = savedState.secondaryHistory || [];
+                dynamicGPSHistories = savedState.dynamicGPSHistories || {};
+                dynamicGPSColors = savedState.dynamicGPSColors || {};
 
                 // Return camera position if it exists
                 if (savedState.center) {
@@ -192,6 +259,72 @@
     }
 
     // --- Helper Functions ---
+    function getShortTopicName(topicName) {
+        if (!topicName) return '';
+
+        // Split by '/' and filter out empty strings that result from leading/trailing slashes
+        const parts = topicName.split('/').filter(p => p.length > 0);
+
+        // If there are 2 or fewer parts, return the original structure with a leading slash.
+        // This handles cases like "/gps/fix" which should remain "/gps/fix".
+        if (parts.length <= 2) {
+            return '/' + parts.join('/');
+        }
+
+        // If there are 3 or more parts, apply the new shortening logic.
+        // e.g., /mvp2_test_robot/remote/id_2/odometry/navsatfix -> /mvp2/odo/nav
+
+        // 1. Get namespace_shorthand from the first part.
+        // e.g., "mvp2_test_robot" -> "mvp2", "alpha_rise" -> "alpha", "xy" -> "xy"
+        const namespacePart = parts[0];
+        const underscoreIndex = namespacePart.indexOf('_');
+        const namespaceShorthand = (underscoreIndex !== -1)
+            ? namespacePart.substring(0, underscoreIndex)
+            : namespacePart;
+
+        // 2. Get the last two parts and shorten them to their first 3 letters.
+        // e.g., "odometry" -> "odo", "navsatfix" -> "nav"
+        const lastPart = parts[parts.length - 1];
+        const secondLastPart = parts[parts.length - 2];
+
+        const lastShort = lastPart.substring(0, 3);
+        const secondLastShort = secondLastPart.substring(0, 3);
+
+        // 3. Combine them in the format /namespace_shorthand/last_2_short/last_1_short
+        return `/${namespaceShorthand}/${secondLastShort}/${lastShort}`;
+    }
+
+    function updateLegend() {
+        const legendItemsContainer = document.getElementById('legend-items');
+        if (!legendItemsContainer) return;
+
+        legendItemsContainer.innerHTML = ''; // Clear existing legend
+
+        // Static items
+        const staticItems = [
+            { color: '#44e215', label: 'Vehicle Path' },
+            { color: '#ff190a', label: 'Editable Mission Path' },
+            { color: '#ffd500', label: 'Published Mission Path' }
+        ];
+
+        staticItems.forEach(item => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="legend-color-box" style="background-color: ${item.color};"></span> ${item.label}`;
+            legendItemsContainer.appendChild(li);
+        });
+
+        // Dynamic GPS items
+        for (const topicName in dynamicGPSColors) {
+            if (dynamicGPSColors.hasOwnProperty(topicName)) {
+                const color = dynamicGPSColors[topicName];
+                const displayName = getShortTopicName(topicName);
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="legend-color-box" style="background-color: ${color};"></span> ${displayName}`;
+                legendItemsContainer.appendChild(li);
+            }
+        }
+    }
+
     function calculateMidpoint(p1, p2) {
         return {
             latitude: (p1.lat + p2.lat) / 2,
@@ -256,6 +389,56 @@
         return markerElement;
     }
 
+    // Add a function to generate unique colors.
+    // It uses a fixed list of 10 colors in order. If all are used, it generates random colors.
+    function generateUniqueColor(usedColors = []) {
+        const fixedColors = [
+            '#33C4FF', // 1. Light Blue
+            '#FF6347', // 2. Tomato (Orange-Red)
+            '#BA55D3', // 3. Medium Orchid (Purple)
+            '#40E0D0', // 4. Turquoise (Cyan)
+            '#FF8C00', // 5. Dark Orange
+            '#EE82EE', // 6. Violet
+            '#6A5ACD', // 7. Slate Blue
+            '#F08080', // 8. Light Coral (Pinkish)
+            '#20B2AA', // 9. Light Sea Green (Teal)
+            '#C71585'  // 10. Medium Violet Red (Magenta)
+        ];
+
+        // Find the first fixed color that is not already in the `usedColors` array.
+        // This ensures colors are assigned in order and are reused if a trail is removed.
+        for (const color of fixedColors) {
+            if (!usedColors.includes(color)) {
+                return color;
+            }
+        }
+
+        // --- Fallback to random color generation if all 10 fixed colors are in use ---
+        let randomColor;
+        const allUsedColors = new Set(usedColors); // Use a Set for efficient lookup.
+        do {
+            // Generate a random 6-digit hex color.
+            randomColor = `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+        } while (allUsedColors.has(randomColor)); // Loop until we find a truly unique color.
+
+        return randomColor;
+    }
+
+
+    // Add functions to create and update dynamic GPS markers
+    function createDynamicGPSMarker(color, lngLat) {
+        const el = document.createElement('div');
+        el.className = 'dynamic-gps-marker';
+        el.style.backgroundColor = color;
+        el.style.width = '12px';
+        el.style.height = '12px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 5px rgba(0,0,0,0.5)';
+
+        return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+    }
+
     // --- Map Initialization Logic ---
     function initializeMap(centerCoords, zoomLevel = 19) {
         if (map) return; // Prevent creating multiple map objects
@@ -284,28 +467,19 @@
                     "source": "offline-raster-tiles"
                 }]
             };
-
         map = new maplibregl.Map({
             container: 'map',
             style: mapStyle,
             center: centerCoords,
             zoom: zoomLevel
         });
-
         map.on('moveend', saveMapState);
         map.on('zoomend', saveMapState);
-
         map.on('load', () => {
             // This code adds the sources and layers for the dynamic vector data (trails, paths).
             // It will work on top of both online and offline base maps.
             map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.7 } });
-
-            map.addSource('topside-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'topside-trail-layer', type: 'line', source: 'topside-trail', paint: { 'line-color': '#A020F0', 'line-width': 2, 'line-opacity': 0.5 } });
-
-            map.addSource('secondary-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-            map.addLayer({ id: 'secondary-trail-layer', type: 'line', source: 'secondary-trail', paint: { 'line-color': '#f5a442', 'line-width': 2, 'line-opacity': 0.5 } });
 
             map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
             map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: EDITABLE_PATH_STYLE_DEFAULT });
@@ -314,10 +488,10 @@
             map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
 
             isMapInitialized = true;
-
             // Redraw everything that might have been restored or received while map was loading
             createEditableWaypointMarkers();
             redrawAllFromState();
+            updateLegend(); // Update legend with static and restored dynamic items
         });
     }
 
@@ -327,7 +501,6 @@
         editableWaypointsData.forEach(item => {
             const el = createEditableWaypointMarkerElement(item);
             const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom' }).setLngLat([item.lon, item.lat]).addTo(map);
-
             marker.on('dragstart', () => {
                 el.classList.add('marker-dragging');
                 if (map.getLayer('editable-waypoints-route-layer')) {
@@ -336,7 +509,6 @@
                     });
                 }
             });
-
             marker.on('drag', () => {
                 const coords = marker.getLngLat();
                 const draggedWaypoint = editableWaypointsData.find(w => w.id === item.id);
@@ -346,7 +518,6 @@
                 }
                 updateEditablePathLine();
             });
-
             marker.on('dragend', () => {
                 el.classList.remove('marker-dragging');
                 if (map.getLayer('editable-waypoints-route-layer')) {
@@ -365,10 +536,9 @@
     function redrawAllFromState() {
         if (!isMapInitialized) return;
         if (currentVehiclePose) updateVehicle(currentVehiclePose);
-
         // Redraw trails from restored history
         redrawAllTrails();
-
+        redrawDynamicGpsTrails();
         // Redraw paths using live data
         updateEditablePathLine();
         drawPublishedPath();
@@ -414,7 +584,7 @@
         if (!isMapInitialized) return;
         editableAltitudeMarkers.forEach(m => m.remove());
         editableAltitudeMarkers = [];
-        let pathPoints = editableWaypointsData.map(w => ({ lat: w.lat, lon: w.lon, alt: w.alt, surge: w.surge}));
+        let pathPoints = editableWaypointsData.map(w => ({ lat: w.lat, lon: w.lon, alt: w.alt, surge: w.surge }));
         if (currentVehiclePose) {
             pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0 });
         }
@@ -425,6 +595,123 @@
         }
     }
 
+    function updateDynamicGPS(topicName, data) {
+        // Robustly check for valid data.
+        if (!map || !data || data.lon == null || data.lat == null) {
+            return;
+        }
+
+        let isNewTopic = false;
+        // Initialize color and history for new topics. This is safe to do before the map is ready.
+        if (!dynamicGPSColors[topicName]) {
+            isNewTopic = true;
+            const usedColors = Object.values(dynamicGPSColors);
+            dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
+            dynamicGPSHistories[topicName] = [];
+        }
+
+        const lngLat = [data.lon, data.lat];
+        // Update history. This is also safe to do before map is ready.
+        dynamicGPSHistories[topicName].push(lngLat);
+        if (dynamicGPSHistories[topicName].length > MAX_HISTORY_POINTS) {
+            dynamicGPSHistories[topicName].shift();
+        }
+
+        // --- All subsequent operations modify the map and must wait for it to be initialized ---
+        if (!isMapInitialized) {
+            return;
+        }
+
+        // Create marker if it doesn't exist, otherwise update its position.
+        if (!dynamicGPSMarkers[topicName]) {
+            dynamicGPSMarkers[topicName] = createDynamicGPSMarker(dynamicGPSColors[topicName], lngLat);
+        } else {
+            dynamicGPSMarkers[topicName].setLngLat(lngLat);
+        }
+
+        // Update trail on map
+        // Sanitize topic name to create a valid ID for MapLibre sources/layers
+        const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+        const sourceId = `gps-trail-${sanitizedTopicName}`;
+        const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+
+        // Create source and layer if they don't exist
+        if (!map.getSource(sourceId)) {
+            map.addSource(sourceId, {
+                type: 'geojson',
+                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+            });
+            map.addLayer({
+                id: layerId,
+                type: 'line',
+                source: sourceId,
+                paint: {
+                    'line-color': dynamicGPSColors[topicName],
+                    'line-width': 2,
+                    'line-opacity': 0.5
+                }
+            });
+        }
+
+        // Update trail data
+        map.getSource(sourceId).setData({
+            type: 'Feature',
+            geometry: {
+                type: 'LineString',
+                coordinates: dynamicGPSHistories[topicName]
+            }
+        });
+
+        if (isNewTopic) {
+            updateLegend();
+        }
+    }
+
+    function redrawDynamicGpsTrails() {
+        if (!isMapInitialized) {
+            return;
+        }
+        for (const topicName in dynamicGPSHistories) {
+            if (dynamicGPSHistories.hasOwnProperty(topicName)) {
+                const history = dynamicGPSHistories[topicName];
+                // Sanitize topic name to create a valid ID for MapLibre sources/layers
+                const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+                const sourceId = `gps-trail-${sanitizedTopicName}`;
+                const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+                // Ensure color exists for this topic
+                if (!dynamicGPSColors[topicName]) {
+                    const usedColors = Object.values(dynamicGPSColors);
+                    dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
+                }
+                // Create source and layer if they don't exist
+                if (!map.getSource(sourceId)) {
+                    map.addSource(sourceId, {
+                        type: 'geojson',
+                        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+                    });
+                    map.addLayer({
+                        id: layerId,
+                        type: 'line',
+                        source: sourceId,
+                        paint: {
+                            'line-color': dynamicGPSColors[topicName],
+                            'line-width': 2,
+                            'line-opacity': 0.5
+                        }
+                    });
+                }
+                // Update trail data
+                map.getSource(sourceId).setData({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: history || []
+                    }
+                });
+            }
+        }
+    }
+
     function drawPublishedPath() {
         if (!isMapInitialized) return;
         // Clear old markers
@@ -432,15 +719,12 @@
         publishedWaypointMarkers = [];
         publishedAltitudeMarkers.forEach(m => m.remove());
         publishedAltitudeMarkers = [];
-
         // This is the GeoPath data from ROS: [vehicle_pose, wp1_ros, wp2_ros, ...]
         const canonicalPath = lastPublishedPath || [];
-
         if (canonicalPath.length === 0) {
             map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
             return;
         }
-
         // 1. Create markers for each waypoint *using the coordinates from the GeoPath message*.
         canonicalPath.forEach((point, index) => {
             publishedWaypointMarkers.push(new maplibregl.Marker({
@@ -448,18 +732,15 @@
                 anchor: 'bottom'
             }).setLngLat([point.lon, point.lat]).addTo(map));
         });
-
         // 2. The line's path points are also directly from the GeoPath message.
         let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge }));
-
         // 3. Set the data for the line layer on the map.
         const lineCoords = linePoints.map(p => [p.lon, p.lat]);
         map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
-
         // 4. Create altitude labels for each segment of the complete line.
         for (let i = 1; i < linePoints.length; i++) {
             const p1 = { lat: linePoints[i - 1].lat, lon: linePoints[i - 1].lon };
-            const p2 = { lat: linePoints[i].lat, lon: linePoints[i].lon, alt: linePoints[i].alt };
+            const p2 = { lat: linePoints[i].lon, lon: linePoints[i].lon, alt: linePoints[i].alt };
             publishedAltitudeMarkers.push(createAltitudeLabel(calculateMidpoint(p1, p2), 'published', '#fffca0'));
         }
     }
@@ -467,8 +748,6 @@
     function redrawAllTrails() {
         if (!isMapInitialized) return;
         map.getSource('vehicle-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: vehicleHistory } });
-        map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsideHistory } });
-        map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryHistory } });
     }
 
     // --- WebSocket Event Handlers ---
@@ -476,65 +755,75 @@
         if (!data || data.lon === undefined || data.lat === undefined) return;
         currentVehiclePose = { ...data };
         updateHistory(vehicleHistory, data);
-
         if (!map) {
             initializeMap([data.lon, data.lat]);
         }
-
         if (isMapInitialized) {
             updateVehicle(data);
             redrawAllTrails();
         }
     });
 
-    // These handlers just add to history and place a marker.
-    // They are simpler because they don't trigger a full redraw.
-    socket.on('topside_pose_update', (data) => {
-        if (!data || data.lon === undefined || data.lat === undefined) return;
-        updateHistory(topsideHistory, data);
-        if (isMapInitialized) {
-            updateTopside(data);
-            map.getSource('topside-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: topsideHistory } });
+    // Add WebSocket handler for dynamic GPS updates
+    socket.on('dynamic_gps_update', (data) => {
+        if (!data || !data.topic || !data.data) {
+            console.error("Received incomplete dynamic_gps_update:", data);
+            return;
         }
-    });
-
-    socket.on('secondary_pose_update', (data) => {
-        if (!data || data.lon === undefined || data.lat === undefined) return;
-        updateHistory(secondaryHistory, data);
-        if (isMapInitialized) {
-            updateSecondary(data);
-            map.getSource('secondary-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: secondaryHistory } });
+        // Initialize map if it hasn't been, using the first valid coordinates we receive.
+        // This ensures the `map` object exists before `updateDynamicGPS` is called.
+        if (!map && data.data.lon != null && data.data.lat != null) {
+            initializeMap([data.data.lon, data.data.lat]);
         }
+        // updateDynamicGPS has its own internal checks for map state and data validity.
+        updateDynamicGPS(data.topic, data.data);
     });
 
     socket.on('published_path_update', (data) => {
-        // // --- DEBUG LOGGING FOR COORDINATE COMPARISON ---
-        // console.log("--- Comparing Waypoint Data on Publish ---");
-
-        // // Log the "editable" data that was sent
-        // console.log("==> SENT (Editable Waypoints):");
-        // editableWaypointsData.forEach(item => {
-        //     console.log(`  ID ${item.id}: lat=${item.lat}, lon=${item.lon}`);
-        // });
-
-        // // Log the "published" data that was received back from ROS
-        // console.log("==> RECEIVED (Published Path from ROS):");
-        // const receivedPath = data || [];
-        // if (receivedPath.length > 1) {
-        //     // Start from index 1 to skip vehicle pose and align with editable waypoints
-        //     receivedPath.slice(1).forEach((point, index) => {
-        //         // The corresponding editable waypoint ID is (index + 1)
-        //         console.log(`  Waypoint #${index + 1}: lat=${point.lat}, lon=${point.lon}`);
-        //     });
-        // } else {
-        //     console.log("  Received path has no waypoints to compare.");
-        // }
-        // console.log("------------------------------------------");
-
         lastPublishedPath = data || [];
         if (isMapInitialized) {
             drawPublishedPath();
         }
+    });
+
+    // Add a handler to remove GPS data when unsubscribed
+    socket.on('gps_topic_unsubscribed', (data) => {
+        const topicName = data.topic;
+        console.log(`Received unsubscription confirmation for ${topicName}. Removing from map.`);
+        if (!topicName || !map || !isMapInitialized) return;
+
+        // Remove marker
+        if (dynamicGPSMarkers[topicName]) {
+            dynamicGPSMarkers[topicName].remove();
+            delete dynamicGPSMarkers[topicName];
+        }
+
+        const sanitizedTopicName = topicName.replace(/[^\w-]/g, '_');
+        const sourceId = `gps-trail-${sanitizedTopicName}`;
+        const layerId = `gps-trail-layer-${sanitizedTopicName}`;
+
+        // To ensure the trail disappears visually, first update its data to be empty.
+        if (map.getSource(sourceId)) {
+            map.getSource(sourceId).setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+        }
+
+        // Now, attempt to remove the layer and source to clean up resources.
+        if (map.getLayer(layerId)) {
+            map.removeLayer(layerId);
+        }
+        if (map.getSource(sourceId)) {
+            map.removeSource(sourceId);
+        }
+
+        // Clean up client-side data stores
+        delete dynamicGPSHistories[topicName];
+        delete dynamicGPSColors[topicName];
+
+        // Update the legend
+        updateLegend();
+
+        // Persist the state change to session storage so the trail doesn't reappear on reload.
+        saveMapState();
     });
 
     // --- Page Load & Interaction Execution ---
@@ -549,7 +838,6 @@
             // This case is handled inside initializeMap, but in practice the pose
             // arrives almost instantly from the server cache.
         }
-
         document.getElementById('map-switch-button').addEventListener('click', () => {
             if (!map) return;
             isOnlineMap = !isOnlineMap; // Toggle the map state
@@ -562,20 +850,23 @@
             editableWaypointMarkers = [];
             editableAltitudeMarkers = [];
             publishedAltitudeMarkers = [];
+            dynamicGPSMarkers = {};
             isMapInitialized = false;
             // Re-initialize using the last known vehicle pose if available, otherwise the old center.
             const initCoords = currentVehiclePose ? [currentVehiclePose.lon, currentVehiclePose.lat] : [center.lng, center.lat];
             initializeMap(initCoords, zoom);
         });
-
         document.addEventListener('clear-history-trails', () => {
             console.log("Clear history trails event received.");
             vehicleHistory = [];
-            topsideHistory = [];
-            secondaryHistory = [];
+            // Also clear all dynamic GPS history trails
+            Object.keys(dynamicGPSHistories).forEach(topic => {
+                dynamicGPSHistories[topic] = [];
+            });
 
             if (isMapInitialized) {
                 redrawAllTrails();
+                redrawDynamicGpsTrails();
             }
             saveMapState();
         });
