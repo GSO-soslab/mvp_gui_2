@@ -482,7 +482,8 @@
             container: 'map',
             style: mapStyle,
             center: centerCoords,
-            zoom: zoomLevel
+            zoom: zoomLevel,
+            doubleClickZoom: false // Disable double click to zoom
         });
         map.on('moveend', saveMapState);
         map.on('zoomend', saveMapState);
@@ -544,30 +545,14 @@
                 fetch('/waypoint_drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: item.alt, surge: item.surge }) });
             });
 
-            // // --- DOUBLE CLICK event for editing ---
-            // el.addEventListener('dblclick', () => {
-            //     // Populate the modal with the waypoint's data
-            //     document.getElementById('editWaypointId').value = item.id;
-            //     document.getElementById('editWaypointLat').value = item.lat;
-            //     document.getElementById('editWaypointLon').value = item.lon;
-            //     document.getElementById('editWaypointAlt').value = item.alt;
-            //     document.getElementById('editWaypointSurge').value = item.surge;
-            //     // Show the modal using jQuery
-            //     $('#waypointEditModal').modal('show');
-            // });
-
-            // --- RIGHT CLICK event for editing ---
-            el.addEventListener('contextmenu', (event) => {
-                // Prevent the default browser right-click menu from showing
-                event.preventDefault();
-
+            // --- DOUBLE CLICK event for editing ---
+            el.addEventListener('dblclick', () => {
                 // Populate the modal with the waypoint's data
                 document.getElementById('editWaypointId').value = item.id;
                 document.getElementById('editWaypointLat').value = item.lat;
                 document.getElementById('editWaypointLon').value = item.lon;
                 document.getElementById('editWaypointAlt').value = item.alt;
                 document.getElementById('editWaypointSurge').value = item.surge;
-                
                 // Show the modal using jQuery
                 $('#waypointEditModal').modal('show');
             });
