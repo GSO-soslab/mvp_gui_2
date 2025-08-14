@@ -1,13 +1,57 @@
 {% extends "base.html" %}
 {% block title%}
-  Map View
+Map View
 {% endblock %}
 
-{% block content%}  
+{% block content%}
 
 <h4>Mission Managers</h4>
 {% include "map_page/states_table.html" %}
 
 {% include "map_page/map_table.html" %}
+
+<!-- Waypoint Edit Modal -->
+<div class="modal fade" id="waypointEditModal" tabindex="-1" role="dialog" aria-labelledby="waypointEditModalLabel"
+  aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="waypointEditModalLabel">Edit Waypoint</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="editWaypointForm">
+          <input type="hidden" id="editWaypointId" name="id">
+          <div class="form-group">
+            <label for="editWaypointLat">Latitude [deg]</label>
+            <input type="number" step="any" class="form-control bg-secondary text-white border-dark"
+              id="editWaypointLat" name="lat" required>
+          </div>
+          <div class="form-group">
+            <label for="editWaypointLon">Longitude [deg]</label>
+            <input type="number" step="any" class="form-control bg-secondary text-white border-dark"
+              id="editWaypointLon" name="lon" required>
+          </div>
+          <div class="form-group">
+            <label for="editWaypointAlt">Altitude [m]</label>
+            <input type="number" step="any" class="form-control bg-secondary text-white border-dark"
+              id="editWaypointAlt" name="alt" required>
+          </div>
+          <div class="form-group">
+            <label for="editWaypointSurge">Surge Velocity [m/s]</label>
+            <input type="number" step="any" class="form-control bg-secondary text-white border-dark"
+              id="editWaypointSurge" name="surge" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="saveWaypointChanges">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}

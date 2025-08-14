@@ -40,6 +40,12 @@
         flex-direction: column;
         align-items: center;
         z-index: 10;
+        cursor: grab;
+        /* Change cursor to indicate draggability */
+    }
+
+    .editable-wpt-marker:active {
+        cursor: grabbing;
     }
 
     .editable-wpt-diamond {
@@ -202,7 +208,7 @@
     let vehicleHistory = [];
     let currentVehiclePose = null; // Holds the most recent pose data for runtime use
     let lastPublishedPath = []; // Holds the most recent path data for runtime use
-    const editableWaypointsData = {{ items_jsn | safe }};
+    let editableWaypointsData = {{ items_jsn | safe }}; // Use 'let' to allow modification
     const serverUrlRoot = "{{ request.url_root }}"; // Gets the app's root URL, e.g., "http://127.0.0.1:5001/"
 
     // --- Marker Storage ---
@@ -500,7 +506,11 @@
         editableWaypointMarkers = [];
         editableWaypointsData.forEach(item => {
             const el = createEditableWaypointMarkerElement(item);
-            const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom' }).setLngLat([item.lon, item.lat]).addTo(map);
+            const marker = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom' })
+                .setLngLat([item.lon, item.lat])
+                .addTo(map);
+
+            // --- DRAG events ---
             marker.on('dragstart', () => {
                 el.classList.add('marker-dragging');
                 if (map.getLayer('editable-waypoints-route-layer')) {
@@ -528,6 +538,19 @@
                 const coords = marker.getLngLat();
                 fetch('/waypoint_drag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, lng: coords.lng, lat: coords.lat, alt: item.alt, surge: item.surge }) });
             });
+
+            // --- DOUBLE CLICK event for editing ---
+            el.addEventListener('dblclick', () => {
+                // Populate the modal with the waypoint's data
+                document.getElementById('editWaypointId').value = item.id;
+                document.getElementById('editWaypointLat').value = item.lat;
+                document.getElementById('editWaypointLon').value = item.lon;
+                document.getElementById('editWaypointAlt').value = item.alt;
+                document.getElementById('editWaypointSurge').value = item.surge;
+                // Show the modal using jQuery
+                $('#waypointEditModal').modal('show');
+            });
+
             editableWaypointMarkers.push(marker);
         });
     }
@@ -786,6 +809,20 @@
         }
     });
 
+    socket.on('waypoints_updated', (data) => {
+        console.log("Waypoints updated from server:", data.waypoints);
+        // Replace the local data cache with the fresh data from the server
+        editableWaypointsData.length = 0; // Clear the array in-place
+        // Use push.apply to add all elements from the new array
+        Array.prototype.push.apply(editableWaypointsData, data.waypoints);
+
+        // Redraw the map elements that depend on this data
+        if (isMapInitialized) {
+            createEditableWaypointMarkers(); // This will remove old markers and create new ones
+            updateEditablePathLine();
+        }
+    });
+
     // Add a handler to remove GPS data when unsubscribed
     socket.on('gps_topic_unsubscribed', (data) => {
         const topicName = data.topic;
@@ -869,6 +906,29 @@
                 redrawDynamicGpsTrails();
             }
             saveMapState();
+        });
+
+        // Add event listener for the modal's save button
+        document.getElementById('saveWaypointChanges').addEventListener('click', () => {
+            const waypointData = {
+                id: document.getElementById('editWaypointId').value,
+                lat: parseFloat(document.getElementById('editWaypointLat').value),
+                lon: parseFloat(document.getElementById('editWaypointLon').value),
+                alt: parseFloat(document.getElementById('editWaypointAlt').value),
+                surge: parseFloat(document.getElementById('editWaypointSurge').value),
+            };
+
+            // Basic validation
+            if (isNaN(waypointData.lat) || isNaN(waypointData.lon) || isNaN(waypointData.alt) || isNaN(waypointData.surge)) {
+                alert("Please enter valid numbers for all waypoint fields.");
+                return;
+            }
+
+            // Emit an event to the server with the updated data
+            socket.emit('update_waypoint', waypointData);
+
+            // Hide the modal
+            $('#waypointEditModal').modal('hide');
         });
     });
 

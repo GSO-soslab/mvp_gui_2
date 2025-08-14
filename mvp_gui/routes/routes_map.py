@@ -42,6 +42,18 @@ def waypoint_drag():
         waypoint.alt = data['alt']
         waypoint.surge = data['surge']
         db.session.commit()
+
+        # After committing, broadcast the update to all clients to keep them in sync.
+        # This is outside a SocketIO handler, so we use the global server instance.
+        with current_app.app_context():
+            all_waypoints = Waypoint.query.order_by(Waypoint.id).all()
+            waypoints_payload = [
+                {"id": w.id, "lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge}
+                for w in all_waypoints
+            ]
+            # Emit to all connected clients. No room needed here.
+            sio_server.emit('waypoints_updated', {'waypoints': waypoints_payload})
+            
     return jsonify({"success": True})
 
 @map_bp.route('/tiles/<int:z>/<int:x>/<int:y>.png')

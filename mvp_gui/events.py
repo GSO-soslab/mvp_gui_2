@@ -140,6 +140,46 @@ def handle_dynamic_gps_update(data):
     
 # --- Handlers for events FROM browsers ---
 
+@sio_server.on('update_waypoint')
+def handle_update_waypoint(data):
+    """
+    Handles a request from a browser client to update a single waypoint.
+    Updates the database and then broadcasts the full, updated list of waypoints
+    to all clients to ensure synchronization.
+    """
+    print(f"Received waypoint update request from sid={request.sid}: {data}")
+    with current_app.app_context():
+        # Use .get() with a default of None to avoid errors if 'id' is missing
+        waypoint_id = data.get('id')
+        if waypoint_id is None:
+            print("Error: Waypoint update request missing 'id'.")
+            return
+
+        waypoint = Waypoint.query.get(int(waypoint_id))
+        
+        if waypoint:
+            # Update waypoint fields from the received data
+            waypoint.lat = float(data.get('lat', waypoint.lat))
+            waypoint.lon = float(data.get('lon', waypoint.lon))
+            waypoint.alt = float(data.get('alt', waypoint.alt))
+            waypoint.surge = float(data.get('surge', waypoint.surge))
+            db.session.commit()
+            print(f"Waypoint {waypoint_id} updated successfully.")
+
+            # After update, fetch the fresh, ordered list of all waypoints
+            all_waypoints = Waypoint.query.order_by(Waypoint.id).all()
+            waypoints_payload = [
+                {"id": w.id, "lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} 
+                for w in all_waypoints
+            ]
+            
+            # Broadcast the complete updated list to all clients in the room
+            sio_server.emit('waypoints_updated', {'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
+            print("Broadcasted updated waypoint list to all clients.")
+        else:
+            print(f"Error: Waypoint with id {waypoint_id} not found for update.")
+
+
 @sio_server.on('ros_action')
 def handle_ros_action(data):
     """
