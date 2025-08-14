@@ -76,7 +76,7 @@
         box-shadow: 0 0 10px 3px rgba(255, 25, 10, 0.7);
     }
 
-    /* --- Style for Altitude Labels on Lines --- */
+    /* --- Style for Segment Labels on Lines --- */
     .altitude-label-marker {
         font-size: 12px;
         font-weight: bold;
@@ -84,6 +84,8 @@
         background: transparent;
         text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
         z-index: 5;
+        line-height: 1.1;
+        /* Adjust for two lines of text */
     }
 
     .altitude-label-marker.published {
@@ -335,15 +337,18 @@
         return {
             latitude: (p1.lat + p2.lat) / 2,
             longitude: (p1.lon + p2.lon) / 2,
-            altitude: p2.alt
+            altitude: p2.alt,
+            surge: p2.surge // The surge of the destination waypoint.
         };
     }
 
-    function createAltitudeLabel(midpoint, type, color) {
+    function createSegmentLabel(midpoint, type, color) {
         const el = document.createElement('div');
         el.className = `altitude-label-marker ${type}`; // e.g., 'editable' or 'published'
         el.style.color = color;
-        el.innerText = `${midpoint.altitude.toFixed(1)}m`;
+        // Use innerHTML to create two lines for altitude (z) and surge (u)
+        const surgeValue = midpoint.surge ?? 0;
+        el.innerHTML = `z: ${midpoint.altitude.toFixed(1)}m<br>u: ${surgeValue.toFixed(1)}m/s`;
         return new maplibregl.Marker({
             element: el,
             anchor: 'center'
@@ -609,12 +614,15 @@
         editableAltitudeMarkers = [];
         let pathPoints = editableWaypointsData.map(w => ({ lat: w.lat, lon: w.lon, alt: w.alt, surge: w.surge }));
         if (currentVehiclePose) {
-            pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0 });
+            // The vehicle itself doesn't have a target surge, but its pose object from ROS has 'u'.
+            // The first segment's label (vehicle to WP1) will correctly use WP1's surge.
+            // We just need to ensure the vehicle point in our array has a surge property for consistency.
+            pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0, surge: currentVehiclePose.u || 0 });
         }
         const lineCoords = pathPoints.map(p => [p.lon, p.lat]);
         map.getSource('editable-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
         for (let i = 1; i < pathPoints.length; i++) {
-            editableAltitudeMarkers.push(createAltitudeLabel(calculateMidpoint(pathPoints[i - 1], pathPoints[i]), 'editable', '#fba5b0'));
+            editableAltitudeMarkers.push(createSegmentLabel(calculateMidpoint(pathPoints[i - 1], pathPoints[i]), 'editable', '#fba5b0'));
         }
     }
 
@@ -756,15 +764,16 @@
             }).setLngLat([point.lon, point.lat]).addTo(map));
         });
         // 2. The line's path points are also directly from the GeoPath message.
-        let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge }));
+        // The ROS node might send 'u' for surge, so handle both 'surge' and 'u' robustly.
+        let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge ?? p.u ?? 0 }));
         // 3. Set the data for the line layer on the map.
         const lineCoords = linePoints.map(p => [p.lon, p.lat]);
         map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
-        // 4. Create altitude labels for each segment of the complete line.
+        // 4. Create segment labels for the complete line.
         for (let i = 1; i < linePoints.length; i++) {
-            const p1 = { lat: linePoints[i - 1].lat, lon: linePoints[i - 1].lon };
-            const p2 = { lat: linePoints[i].lon, lon: linePoints[i].lon, alt: linePoints[i].alt };
-            publishedAltitudeMarkers.push(createAltitudeLabel(calculateMidpoint(p1, p2), 'published', '#fffca0'));
+            const p1 = linePoints[i - 1];
+            const p2 = linePoints[i];
+            publishedAltitudeMarkers.push(createSegmentLabel(calculateMidpoint(p1, p2), 'published', '#fffca0'));
         }
     }
 
