@@ -668,14 +668,14 @@
                 paint: {
                     'circle-radius': 4,
                     'circle-color': dynamicGPSColors[topicName],
-                    'circle-stroke-width': 1,
-                    'circle-stroke-color': '#ffffff',
+                    // 'circle-stroke-width': 1,
+                    // 'circle-stroke-color': '#ffffff',
                     'circle-opacity': [
                         'interpolate',
                         ['linear'],
                         ['get', 'age_index'],
                         0, 0.1, // Oldest point: opacity 0.1
-                        MAX_HISTORY_POINTS_GPS - 1, 0.6 // Newest point: opacity 0.8
+                        MAX_HISTORY_POINTS_GPS - 1, 0.8 // Newest point: opacity 0.8
                     ]
                 }
             });
@@ -737,14 +737,14 @@
                         paint: {
                             'circle-radius': 4,
                             'circle-color': dynamicGPSColors[topicName],
-                            'circle-stroke-width': 1,
-                            'circle-stroke-color': '#ffffff',
+                            // 'circle-stroke-width': 1,
+                            // 'circle-stroke-color': '#ffffff',
                             'circle-opacity': [
                                 'interpolate',
                                 ['linear'],
                                 ['get', 'age_index'],
                                 0, 0.1,
-                                MAX_HISTORY_POINTS_GPS - 1, 0.6
+                                MAX_HISTORY_POINTS_GPS - 1, 0.8
                             ]
                         }
                     });
