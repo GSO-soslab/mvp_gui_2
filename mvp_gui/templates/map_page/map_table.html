@@ -668,14 +668,12 @@
                 paint: {
                     'circle-radius': 4,
                     'circle-color': dynamicGPSColors[topicName],
-                    // 'circle-stroke-width': 1,
-                    // 'circle-stroke-color': '#ffffff',
                     'circle-opacity': [
                         'interpolate',
                         ['linear'],
-                        ['get', 'age_index'],
+                        ['get', 'age_ratio'],
                         0, 0.1, // Oldest point: opacity 0.1
-                        MAX_HISTORY_POINTS_GPS - 1, 0.8 // Newest point: opacity 0.8
+                        1, 0.8 // Newest point: opacity 0.8
                     ]
                 }
             });
@@ -683,10 +681,11 @@
 
         // Create GeoJSON FeatureCollection from history.
         const history = dynamicGPSHistories[topicName];
+        const numPoints = history.length;
         const features = history.map((coords, index) => ({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: coords },
-            properties: { age_index: index }
+            properties: { age_ratio: (numPoints > 1) ? (index / (numPoints - 1)) : 1.0 }
         }));
 
         // Update point trail data.
@@ -737,24 +736,23 @@
                         paint: {
                             'circle-radius': 4,
                             'circle-color': dynamicGPSColors[topicName],
-                            // 'circle-stroke-width': 1,
-                            // 'circle-stroke-color': '#ffffff',
                             'circle-opacity': [
                                 'interpolate',
                                 ['linear'],
-                                ['get', 'age_index'],
+                                ['get', 'age_ratio'],
                                 0, 0.1,
-                                MAX_HISTORY_POINTS_GPS - 1, 0.8
+                                1, 0.8
                             ]
                         }
                     });
                 }
 
                 // Create GeoJSON FeatureCollection from history.
+                const numPoints = history.length;
                 const features = history.map((coords, index) => ({
                     type: 'Feature',
                     geometry: { type: 'Point', coordinates: coords },
-                    properties: { age_index: index }
+                    properties: { age_ratio: (numPoints > 1) ? (index / (numPoints - 1)) : 1.0 }
                 }));
 
                 // Update point trail data.
