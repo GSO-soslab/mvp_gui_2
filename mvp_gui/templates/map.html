@@ -5,10 +5,16 @@ Map View
 
 {% block content%}
 
-<h4>Mission Managers</h4>
-{% include "map_page/states_table.html" %}
+<div class="row">
+  <div class="col-lg-4">
+    <h4 class="mt-2">Mission Managers</h4>
+    {% include "map_page/states_table.html" %}
+  </div>
+  <div class="col-lg-8 mt-2">
+    {% include "map_page/map_table.html" %}
+  </div>
+</div>
 
-{% include "map_page/map_table.html" %}
 
 <!-- Waypoint Edit Modal -->
 <div class="modal fade" id="waypointEditModal" tabindex="-1" role="dialog" aria-labelledby="waypointEditModalLabel"

@@ -38,6 +38,32 @@
     </tbody>
 </table>
 
+<h4 class="mt-2">Map Controls</h4>
+
+<div class="mb-3"> <!-- Container for all map interaction buttons -->
+    <!-- Row 1: Map Source Control & User Marker -->
+    <div class="d-flex align-items-center mb-3">
+        <button id="map-switch-button" class="btn btn-secondary mr-3">Switch Map Source</button>
+        <span id="map-status" class="font-weight-bold"></span>
+    </div>
+
+    <!-- Row 2: Add User Markers -->
+    <div class="d-flex align-items-center mb-3">
+        <button id="add-user-marker-button" class="btn btn-info">Add User Marker</button>
+    </div>
+
+    <!-- Row 3: Add Waypoint -->
+    <div class="d-flex align-items-center mb-3"> <!-- No margin needed on the last item -->
+        <button id="add-waypoint-button" class="btn btn-primary">Add Waypoint</button>
+    </div>
+
+    <!-- Row 3: Publish Waypoint -->
+    <div class="d-flex align-items-center"> <!-- No margin needed on the last item -->
+        <button id="publish-waypoints-button" class="btn btn-warning">Publish Waypoints</button>
+    </div>
+</div>
+
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         // This code runs only after the page is fully loaded
@@ -77,7 +103,7 @@
             // Corrected to use 'transitions' key which is sent from the ROS node
             (data.transitions || []).forEach(state => {
                 const form = document.createElement('form');
-                form.classList.add('d-inline', 'mr-4', 'mb-2');
+                form.classList.add('d-inline', 'mr-2', 'mb-2');
                 form.dataset.state = state;
 
                 const button = document.createElement('button');
