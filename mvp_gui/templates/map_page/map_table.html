@@ -1,5 +1,6 @@
 <!-- Add a button to switch map sources -->
 <button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online/Offline Map</button>
+<button id="add-user-marker-button" class="btn btn-info mb-2">Add User Marker</button>
 
 <div style="position: relative;">
     <div id="map" class="map"></div>
@@ -75,6 +76,37 @@
         transform: rotate(45deg);
         box-shadow: 0 0 10px 3px rgba(255, 25, 10, 0.7);
     }
+
+    /* --- Styles for User-Defined Markers (Pentagons) --- */
+    .user-marker-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .user-marker-shape {
+        width: 22px;
+        height: 22px;
+        /* background-color is now set dynamically via JavaScript */
+        clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+        /* Pentagon */
+        opacity: 0.8;
+        border: 1px solid white;
+        z-index: 5;
+        /* Lower than editable waypoints */
+        cursor: pointer;
+    }
+
+    .user-marker-label {
+        font-size: 12px;
+        /* color is now set dynamically via JavaScript */
+        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        transform: translateY(2px);
+        /* Position label slightly below marker shape */
+        white-space: nowrap;
+        /* Prevent name from wrapping */
+    }
+
 
     /* --- Style for Segment Labels on Lines --- */
     .altitude-label-marker {
@@ -194,6 +226,66 @@
     const MAX_HISTORY_POINTS = 150;
     const MAX_HISTORY_POINTS_GPS = 30;
     const MAP_STATE_KEY = 'mvpMapState';
+
+    // --- Centralized Color Management ---
+    const colorManager = {
+        // A curated list of distinct, visually appealing colors.
+        predefinedColors: [
+            '#33C4FF', // 1. Light Blue
+            '#FF6347', // 2. Tomato (Orange-Red)
+            '#BA55D3', // 3. Medium Orchid (Purple)
+            '#40E0D0', // 4. Turquoise (Cyan)
+            '#FF8C00', // 5. Dark Orange
+            '#EE82EE', // 6. Violet
+            '#6A5ACD', // 7. Slate Blue
+            '#F08080', // 8. Light Coral (Pinkish)
+            '#20B2AA', // 9. Light Sea Green (Teal)
+            '#C71585'  // 10. Medium Violet Red (Magenta)
+        ],
+
+        /**
+         * Gathers all colors currently used by dynamic map elements.
+         * @returns {Set<string>} A Set of hex color strings.
+         */
+        getUsedColors: function () {
+            const used = new Set();
+            // Get colors from dynamic GPS trails
+            Object.values(dynamicGPSColors).forEach(color => used.add(color));
+            // Get colors from user-defined markers
+            userMarkersData.forEach(marker => {
+                if (marker.color) {
+                    used.add(marker.color);
+                }
+            });
+            return used;
+        },
+
+        /**
+         * Assigns a unique color for a new map element.
+         * It first tries to use an available color from the predefined list.
+         * If all are taken, it generates a random color that is not in use.
+         * @returns {string} A hex color string.
+         */
+        assignColor: function () {
+            const usedColors = this.getUsedColors();
+
+            // Try to find an unused predefined color first for consistency
+            for (const color of this.predefinedColors) {
+                if (!usedColors.has(color)) {
+                    return color;
+                }
+            }
+
+            // Fallback: generate a random color if all predefined are used
+            let randomColor;
+            do {
+                randomColor = `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+            } while (usedColors.has(randomColor)); // Ensure it's not a fluke duplicate
+
+            return randomColor;
+        }
+    };
+
     const EDITABLE_PATH_STYLE_DEFAULT = {
         'line-color': '#ff190a',
         'line-width': 3,
@@ -226,6 +318,11 @@
     let dynamicGPSHistories = {}; // Store histories for each GPS topic
     let dynamicGPSColors = {}; // Store colors for each GPS topic
 
+    // --- User-Defined Markers ---
+    let isAddingUserMarker = false;
+    let userMarkersData = []; // Array of {id, lat, lon, name, color}
+    let userMarkerObjects = {}; // Map of id -> maplibre marker object
+
     // --- State Persistence Functions ---
     function saveMapState() {
         // We only save the view settings, history trails, and colors.
@@ -234,6 +331,7 @@
             vehicleHistory: vehicleHistory,
             dynamicGPSHistories: dynamicGPSHistories,
             dynamicGPSColors: dynamicGPSColors,
+            userMarkers: userMarkersData, // Save user markers
         };
         if (map && isMapInitialized) {
             stateToSave.zoom = map.getZoom();
@@ -252,6 +350,15 @@
                 vehicleHistory = savedState.vehicleHistory || [];
                 dynamicGPSHistories = savedState.dynamicGPSHistories || {};
                 dynamicGPSColors = savedState.dynamicGPSColors || {};
+                userMarkersData = savedState.userMarkers || []; // Load user markers
+
+                // --- Patch loaded data: Assign colors to any user markers that don't have one ---
+                // This ensures backward compatibility with old session data.
+                userMarkersData.forEach(marker => {
+                    if (!marker.color) {
+                        marker.color = colorManager.assignColor();
+                    }
+                });
 
                 // Return camera position if it exists
                 if (savedState.center) {
@@ -332,6 +439,14 @@
                 legendItemsContainer.appendChild(li);
             }
         }
+
+        // User-defined markers - now each has its own entry
+        userMarkersData.forEach(marker => {
+            const li = document.createElement('li');
+            const markerColor = marker.color || '#9400D3'; // Fallback for safety
+            li.innerHTML = `<span class="legend-color-box" style="background-color: ${markerColor}; opacity: 0.8;"></span> ${marker.name}`;
+            legendItemsContainer.appendChild(li);
+        });
     }
 
     function calculateMidpoint(p1, p2) {
@@ -401,41 +516,39 @@
         return markerElement;
     }
 
-    // Add a function to generate unique colors.
-    // It uses a fixed list of 10 colors in order. If all are used, it generates random colors.
-    function generateUniqueColor(usedColors = []) {
-        const fixedColors = [
-            '#33C4FF', // 1. Light Blue
-            '#FF6347', // 2. Tomato (Orange-Red)
-            '#BA55D3', // 3. Medium Orchid (Purple)
-            '#40E0D0', // 4. Turquoise (Cyan)
-            '#FF8C00', // 5. Dark Orange
-            '#EE82EE', // 6. Violet
-            '#6A5ACD', // 7. Slate Blue
-            '#F08080', // 8. Light Coral (Pinkish)
-            '#20B2AA', // 9. Light Sea Green (Teal)
-            '#C71585'  // 10. Medium Violet Red (Magenta)
-        ];
+    function createUserMarker(markerData) {
+        const container = document.createElement('div');
+        container.className = 'user-marker-container';
 
-        // Find the first fixed color that is not already in the `usedColors` array.
-        // This ensures colors are assigned in order and are reused if a trail is removed.
-        for (const color of fixedColors) {
-            if (!usedColors.includes(color)) {
-                return color;
-            }
-        }
+        const markerEl = document.createElement('div');
+        markerEl.className = 'user-marker-shape';
+        // --- Set color dynamically ---
+        markerEl.style.backgroundColor = markerData.color || '#9400D3'; // Fallback to purple
 
-        // --- Fallback to random color generation if all 10 fixed colors are in use ---
-        let randomColor;
-        const allUsedColors = new Set(usedColors); // Use a Set for efficient lookup.
-        do {
-            // Generate a random 6-digit hex color.
-            randomColor = `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
-        } while (allUsedColors.has(randomColor)); // Loop until we find a truly unique color.
+        const labelEl = document.createElement('div');
+        labelEl.className = 'user-marker-label';
+        labelEl.innerText = markerData.name;
+        // --- Set color dynamically ---
+        labelEl.style.color = markerData.color || '#DA70D6'; // Fallback to orchid
 
-        return randomColor;
+        container.appendChild(markerEl);
+        container.appendChild(labelEl);
+
+        container.addEventListener('dblclick', () => {
+            // Populate and show the modal for editing
+            document.getElementById('userMarkerId').value = markerData.id;
+            document.getElementById('userMarkerName').value = markerData.name;
+            document.getElementById('userMarkerLat').value = markerData.lat;
+            document.getElementById('userMarkerLon').value = markerData.lon;
+            $('#userMarkerEditModal').modal('show');
+        });
+
+        const marker = new maplibregl.Marker({ element: container, anchor: 'center', draggable: false })
+            .setLngLat([markerData.lon, markerData.lat])
+            .addTo(map);
+
+        userMarkerObjects[markerData.id] = marker;
     }
-
 
     // Add functions to create and update dynamic GPS markers
     function createDynamicGPSMarker(color, lngLat) {
@@ -501,11 +614,47 @@
             map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
 
             isMapInitialized = true;
+
+            // --- Map click logic for adding user marker ---
+            map.on('click', (e) => {
+                if (!isAddingUserMarker) return;
+
+                const newId = `um-${Date.now()}`;
+                const newMarkerData = {
+                    id: newId,
+                    lat: e.lngLat.lat,
+                    lon: e.lngLat.lng,
+                    name: `user-marker-${userMarkersData.length + 1}`,
+                    color: colorManager.assignColor() // Assign a new color
+                };
+
+                userMarkersData.push(newMarkerData);
+                createUserMarker(newMarkerData);
+                updateLegend();
+                saveMapState();
+
+                // Reset button and cursor
+                const addUserMarkerBtn = document.getElementById('add-user-marker-button');
+                isAddingUserMarker = false;
+                addUserMarkerBtn.classList.remove('btn-success');
+                addUserMarkerBtn.classList.add('btn-info');
+                addUserMarkerBtn.textContent = 'Add User Marker';
+                map.getCanvas().style.cursor = '';
+            });
+
             // Redraw everything that might have been restored or received while map was loading
+            redrawUserMarkers();
             createEditableWaypointMarkers();
             redrawAllFromState();
             updateLegend(); // Update legend with static and restored dynamic items
         });
+    }
+
+    function redrawUserMarkers() {
+        if (!isMapInitialized) return;
+        Object.values(userMarkerObjects).forEach(marker => marker.remove());
+        userMarkerObjects = {};
+        userMarkersData.forEach(markerData => createUserMarker(markerData));
     }
 
     function createEditableWaypointMarkers() {
@@ -620,8 +769,7 @@
         // Initialize color and history for new topics. This is safe to do before the map is ready.
         if (!dynamicGPSColors[topicName]) {
             isNewTopic = true;
-            const usedColors = Object.values(dynamicGPSColors);
-            dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
+            dynamicGPSColors[topicName] = colorManager.assignColor();
             dynamicGPSHistories[topicName] = [];
         }
 
@@ -719,8 +867,7 @@
 
                 // Ensure color exists for this topic.
                 if (!dynamicGPSColors[topicName]) {
-                    const usedColors = Object.values(dynamicGPSColors);
-                    dynamicGPSColors[topicName] = generateUniqueColor(usedColors);
+                    dynamicGPSColors[topicName] = colorManager.assignColor();
                 }
 
                 // Create source and layer for points if they don't exist.
@@ -937,6 +1084,25 @@
             const initCoords = currentVehiclePose ? [currentVehiclePose.lon, currentVehiclePose.lat] : [center.lng, center.lat];
             initializeMap(initCoords, zoom);
         });
+
+        // --- Add User Marker Button Logic ---
+        const addUserMarkerBtn = document.getElementById('add-user-marker-button');
+        addUserMarkerBtn.addEventListener('click', () => {
+            if (!isMapInitialized) return;
+            isAddingUserMarker = !isAddingUserMarker;
+            if (isAddingUserMarker) {
+                addUserMarkerBtn.classList.add('btn-success');
+                addUserMarkerBtn.classList.remove('btn-info');
+                addUserMarkerBtn.textContent = 'Click on map to place marker...';
+                map.getCanvas().style.cursor = 'crosshair';
+            } else {
+                addUserMarkerBtn.classList.remove('btn-success');
+                addUserMarkerBtn.classList.add('btn-info');
+                addUserMarkerBtn.textContent = 'Add User Marker';
+                map.getCanvas().style.cursor = '';
+            }
+        });
+
         document.addEventListener('clear-history-trails', () => {
             console.log("Clear history trails event received.");
             vehicleHistory = [];
@@ -952,7 +1118,7 @@
             saveMapState();
         });
 
-        // Add event listener for the modal's save button
+        // Add event listener for the waypoint modal's save button
         document.getElementById('saveWaypointChanges').addEventListener('click', () => {
             const waypointData = {
                 id: document.getElementById('editWaypointId').value,
@@ -973,6 +1139,39 @@
 
             // Hide the modal
             $('#waypointEditModal').modal('hide');
+        });
+
+        // Add event listener for the user marker modal's save button
+        document.getElementById('saveUserMarkerChanges').addEventListener('click', () => {
+            const markerId = document.getElementById('userMarkerId').value;
+            const updatedMarkerData = {
+                name: document.getElementById('userMarkerName').value,
+                lat: parseFloat(document.getElementById('userMarkerLat').value),
+                lon: parseFloat(document.getElementById('userMarkerLon').value),
+            };
+
+            // Find index and update data array
+            const markerIndex = userMarkersData.findIndex(m => m.id == markerId);
+            if (markerIndex > -1) {
+                userMarkersData[markerIndex].name = updatedMarkerData.name;
+                userMarkersData[markerIndex].lat = updatedMarkerData.lat;
+                userMarkersData[markerIndex].lon = updatedMarkerData.lon;
+
+                // Update visual marker on map
+                const markerObject = userMarkerObjects[markerId];
+                if (markerObject) {
+                    markerObject.setLngLat([updatedMarkerData.lon, updatedMarkerData.lat]);
+                    // Update label text
+                    const labelEl = markerObject.getElement().querySelector('.user-marker-label');
+                    if (labelEl) {
+                        labelEl.innerText = updatedMarkerData.name;
+                    }
+                }
+
+                updateLegend();
+                saveMapState();
+            }
+            $('#userMarkerEditModal').modal('hide');
         });
     });
 
