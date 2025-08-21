@@ -1,6 +1,18 @@
-<!-- Add a button to switch map sources -->
-<button id="map-switch-button" class="btn btn-secondary mb-2">Switch to Online/Offline Map</button>
-<button id="add-user-marker-button" class="btn btn-info mb-2">Add User Marker</button>
+<div class="mb-3"> <!-- Container for all map interaction buttons -->
+    <!-- Row 1: Map Source Control & User Marker -->
+    <div class="d-flex align-items-center mb-3"> 
+        <button id="map-switch-button" class="btn btn-secondary">Switch Map Source</button>
+        <span id="map-status" class="ml-3 font-weight-bold"></span>
+        <!-- 1. Added ml-3 for spacing from the span -->
+        <button id="add-user-marker-button" class="btn btn-info ml-3">Add User Marker</button>
+    </div>
+
+    <!-- Row 2: Waypoint Actions -->
+    <div> <!-- No margin needed on the last item -->
+        <button id="add-waypoint-button" class="btn btn-primary mr-2">Add Waypoint</button>
+        <button id="publish-waypoints-button" class="btn btn-warning">Publish Waypoints</button> 
+    </div>
+</div>
 
 <div style="position: relative;">
     <div id="map" class="map"></div>
@@ -90,8 +102,8 @@
         /* background-color is now set dynamically via JavaScript */
         clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
         /* Pentagon */
-        opacity: 0.8;
-        border: 1px solid white;
+        opacity: 0.7;
+        /* border: 1px solid white; */
         z-index: 5;
         /* Lower than editable waypoints */
         cursor: pointer;
@@ -318,8 +330,9 @@
     let dynamicGPSHistories = {}; // Store histories for each GPS topic
     let dynamicGPSColors = {}; // Store colors for each GPS topic
 
-    // --- User-Defined Markers ---
+    // --- User-Defined Markers & Waypoint Adding---
     let isAddingUserMarker = false;
+    let isAddingWaypoint = false;
     let userMarkersData = []; // Array of {id, lat, lon, name, color}
     let userMarkerObjects = {}; // Map of id -> maplibre marker object
 
@@ -375,6 +388,13 @@
     }
 
     // --- Helper Functions ---
+    function updateMapStatusText() {
+        const statusEl = document.getElementById('map-status');
+        if (statusEl) {
+            statusEl.textContent = `Current Map: ${isOnlineMap ? 'Online' : 'Offline'}`;
+        }
+    }
+
     function getShortTopicName(topicName) {
         if (!topicName) return '';
 
@@ -617,29 +637,42 @@
 
             // --- Map click logic for adding user marker ---
             map.on('click', (e) => {
-                if (!isAddingUserMarker) return;
-
-                const newId = `um-${Date.now()}`;
-                const newMarkerData = {
-                    id: newId,
-                    lat: e.lngLat.lat,
-                    lon: e.lngLat.lng,
-                    name: `user-marker-${userMarkersData.length + 1}`,
-                    color: colorManager.assignColor() // Assign a new color
-                };
-
-                userMarkersData.push(newMarkerData);
-                createUserMarker(newMarkerData);
-                updateLegend();
-                saveMapState();
-
-                // Reset button and cursor
                 const addUserMarkerBtn = document.getElementById('add-user-marker-button');
-                isAddingUserMarker = false;
-                addUserMarkerBtn.classList.remove('btn-success');
-                addUserMarkerBtn.classList.add('btn-info');
-                addUserMarkerBtn.textContent = 'Add User Marker';
-                map.getCanvas().style.cursor = '';
+                const addWaypointBtn = document.getElementById('add-waypoint-button');
+
+                if (isAddingUserMarker) {
+                    const newId = `um-${Date.now()}`;
+                    const newMarkerData = {
+                        id: newId,
+                        lat: e.lngLat.lat,
+                        lon: e.lngLat.lng,
+                        name: `user-marker-${userMarkersData.length + 1}`,
+                        color: colorManager.assignColor()
+                    };
+
+                    userMarkersData.push(newMarkerData);
+                    createUserMarker(newMarkerData);
+                    updateLegend();
+                    saveMapState();
+
+                    isAddingUserMarker = false;
+                    addUserMarkerBtn.classList.remove('btn-success');
+                    addUserMarkerBtn.classList.add('btn-info');
+                    addUserMarkerBtn.textContent = 'Add User Marker';
+                    map.getCanvas().style.cursor = '';
+
+                } else if (isAddingWaypoint) {
+                    socket.emit('add_waypoint', {
+                        lat: e.lngLat.lat,
+                        lon: e.lngLat.lng
+                    });
+
+                    isAddingWaypoint = false;
+                    addWaypointBtn.classList.remove('btn-success');
+                    addWaypointBtn.classList.add('btn-primary');
+                    addWaypointBtn.textContent = 'Add Waypoint';
+                    map.getCanvas().style.cursor = '';
+                }
             });
 
             // Redraw everything that might have been restored or received while map was loading
@@ -1058,6 +1091,8 @@
     document.addEventListener('DOMContentLoaded', () => {
         // Load history and view settings, but wait for live data to init map
         const loadedState = loadMapState();
+        updateMapStatusText(); // Set the initial status text
+
         if (loadedState) {
             const [center, zoom] = loadedState;
             // We have a center/zoom, but we still wait for the first pose to init
@@ -1069,6 +1104,7 @@
         document.getElementById('map-switch-button').addEventListener('click', () => {
             if (!map) return;
             isOnlineMap = !isOnlineMap; // Toggle the map state
+            updateMapStatusText();
             saveMapState();
             const center = map.getCenter();
             const zoom = map.getZoom();
@@ -1085,10 +1121,37 @@
             initializeMap(initCoords, zoom);
         });
 
-        // --- Add User Marker Button Logic ---
+        document.getElementById('publish-waypoints-button').addEventListener('click', () => {
+            socket.emit('publish_waypoints_request');
+        });
+
+        const addWaypointBtn = document.getElementById('add-waypoint-button');
         const addUserMarkerBtn = document.getElementById('add-user-marker-button');
+
+        // --- Add Waypoint Button Logic ---
+        addWaypointBtn.addEventListener('click', () => {
+            if (!isMapInitialized) return;
+            if (isAddingUserMarker) addUserMarkerBtn.click(); // Deactivate other mode
+
+            isAddingWaypoint = !isAddingWaypoint;
+            if (isAddingWaypoint) {
+                addWaypointBtn.classList.add('btn-success');
+                addWaypointBtn.classList.remove('btn-primary');
+                addWaypointBtn.textContent = 'Click on map to place waypoint...';
+                map.getCanvas().style.cursor = 'crosshair';
+            } else {
+                addWaypointBtn.classList.remove('btn-success');
+                addWaypointBtn.classList.add('btn-primary');
+                addWaypointBtn.textContent = 'Add Waypoint';
+                map.getCanvas().style.cursor = '';
+            }
+        });
+
+        // --- Add User Marker Button Logic ---
         addUserMarkerBtn.addEventListener('click', () => {
             if (!isMapInitialized) return;
+            if (isAddingWaypoint) addWaypointBtn.click(); // Deactivate other mode
+
             isAddingUserMarker = !isAddingUserMarker;
             if (isAddingUserMarker) {
                 addUserMarkerBtn.classList.add('btn-success');
@@ -1118,7 +1181,7 @@
             saveMapState();
         });
 
-        // Add event listener for the waypoint modal's save button
+        // Event listener for waypoint modal's SAVE button
         document.getElementById('saveWaypointChanges').addEventListener('click', () => {
             const waypointData = {
                 id: document.getElementById('editWaypointId').value,
@@ -1127,21 +1190,24 @@
                 alt: parseFloat(document.getElementById('editWaypointAlt').value),
                 surge: parseFloat(document.getElementById('editWaypointSurge').value),
             };
-
-            // Basic validation
             if (isNaN(waypointData.lat) || isNaN(waypointData.lon) || isNaN(waypointData.alt) || isNaN(waypointData.surge)) {
                 alert("Please enter valid numbers for all waypoint fields.");
                 return;
             }
-
-            // Emit an event to the server with the updated data
             socket.emit('update_waypoint', waypointData);
-
-            // Hide the modal
             $('#waypointEditModal').modal('hide');
         });
 
-        // Add event listener for the user marker modal's save button
+        // Event listener for waypoint modal's DELETE button
+        document.getElementById('deleteWaypoint').addEventListener('click', () => {
+            const waypointId = document.getElementById('editWaypointId').value;
+            if (confirm(`Are you sure you want to delete waypoint ${waypointId}?`)) {
+                socket.emit('delete_waypoint', { id: waypointId });
+                $('#waypointEditModal').modal('hide');
+            }
+        });
+
+        // Event listener for user marker modal's SAVE button
         document.getElementById('saveUserMarkerChanges').addEventListener('click', () => {
             const markerId = document.getElementById('userMarkerId').value;
             const updatedMarkerData = {
@@ -1150,28 +1216,41 @@
                 lon: parseFloat(document.getElementById('userMarkerLon').value),
             };
 
-            // Find index and update data array
             const markerIndex = userMarkersData.findIndex(m => m.id == markerId);
             if (markerIndex > -1) {
                 userMarkersData[markerIndex].name = updatedMarkerData.name;
                 userMarkersData[markerIndex].lat = updatedMarkerData.lat;
                 userMarkersData[markerIndex].lon = updatedMarkerData.lon;
 
-                // Update visual marker on map
                 const markerObject = userMarkerObjects[markerId];
                 if (markerObject) {
                     markerObject.setLngLat([updatedMarkerData.lon, updatedMarkerData.lat]);
-                    // Update label text
                     const labelEl = markerObject.getElement().querySelector('.user-marker-label');
-                    if (labelEl) {
-                        labelEl.innerText = updatedMarkerData.name;
-                    }
+                    if (labelEl) labelEl.innerText = updatedMarkerData.name;
                 }
-
                 updateLegend();
                 saveMapState();
             }
             $('#userMarkerEditModal').modal('hide');
+        });
+
+        // Event listener for user marker modal's DELETE button
+        document.getElementById('deleteUserMarker').addEventListener('click', () => {
+            const markerId = document.getElementById('userMarkerId').value;
+            if (confirm(`Are you sure you want to delete this user marker?`)) {
+                const markerIndex = userMarkersData.findIndex(m => m.id == markerId);
+                if (markerIndex > -1) {
+                    userMarkersData.splice(markerIndex, 1); // Remove from data array
+                    const markerObject = userMarkerObjects[markerId];
+                    if (markerObject) {
+                        markerObject.remove(); // Remove from map
+                        delete userMarkerObjects[markerId]; // Remove from tracking object
+                    }
+                    updateLegend();
+                    saveMapState();
+                }
+                $('#userMarkerEditModal').modal('hide');
+            }
         });
     });
 
