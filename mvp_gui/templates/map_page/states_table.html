@@ -77,13 +77,13 @@
             // Corrected to use 'transitions' key which is sent from the ROS node
             (data.transitions || []).forEach(state => {
                 const form = document.createElement('form');
-                form.classList.add('d-inline', 'mr-2', 'mb-2');
+                form.classList.add('d-inline', 'mr-4', 'mb-2');
                 form.dataset.state = state;
 
                 const button = document.createElement('button');
                 button.type = 'submit';
                 button.textContent = state;
-                button.classList.add('btn', 'btn-primary', 'btn-sm'); // Added Bootstrap button classes
+                button.classList.add('btn', 'btn-primary', 'btn'); // Added Bootstrap button classes
 
                 form.appendChild(button);
                 connectedStatesCell.appendChild(form);

@@ -83,10 +83,10 @@
                 controlRow.innerHTML = `
                     <td>${key}</td>
                     <td>
-                        <button class="btn btn-success btn-sm" onclick="launchFile('${key}', true)">
+                        <button class="btn btn-success btn mr-5" onclick="launchFile('${key}', true)">
                             Launch
                         </button>
-                        <button class="btn btn-danger btn-sm" onclick="launchFile('${key}', false)">
+                        <button class="btn btn-danger btn" onclick="launchFile('${key}', false)">
                             Terminate
                         </button>
                     </td>
@@ -98,7 +98,7 @@
                 const statusCellId = 'status-' + key.replace(/\//g, '-');
                 statusRow.innerHTML = `
                     <td>${key}</td>
-                    <td id="${statusCellId}">Unknown</td>
+                    <td id="${statusCellId}"><strong>Unknown</strong></td>
                 `;
                 statusTableBody.appendChild(statusRow);
             });
@@ -117,10 +117,10 @@
                 if (statusCell) {
                     const status = statuses[index];
                     if (status === 1) {
-                        statusCell.textContent = 'Launched';
+                        statusCell.innerHTML = '<strong>Launched</strong>';
                         statusCell.style.color = 'lightgreen';
                     } else {
-                        statusCell.textContent = 'Not Launched';
+                        statusCell.innerHTML = '<strong>Not Launched</strong>';
                         statusCell.style.color = 'lightcoral';
                     }
                 } else {
