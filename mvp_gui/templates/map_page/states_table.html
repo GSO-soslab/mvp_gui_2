@@ -11,12 +11,12 @@
             <td id="controllerState">Unknown</td>
             <td>
                 <form id="disableForm">
-                    <button type="submit">Disable</button>
+                    <button type="submit" class="btn btn-danger">Disable</button>
                 </form>
             </td>
             <td>
                 <form id="enableForm">
-                    <button type="submit">Enable</button>
+                    <button type="submit" class="btn btn-success">Enable</button>
                 </form>
             </td>
         </tr>
@@ -26,7 +26,7 @@
 <table class="table table-hover table-dark">
     <thead>
         <tr>
-            <th scope="col">Current state</th>
+            <th scope="col">Helm state</th>
             <th scope="col">Connected states</th>
         </tr>
     </thead>
@@ -38,9 +38,23 @@
     </tbody>
 </table>
 
-<form id="publishForm">
-    <button type="submit"> Publish waypoints </button>
-</form>
+<h4 class="mt-2">Map Controls</h4>
+
+<div class="mb-3"> <!-- Container for all map interaction buttons -->
+    <!-- Row 1: Map Source Control & User Marker -->
+    <div class="d-flex align-items-center mb-3">
+        <button id="map-switch-button" class="btn btn-secondary mr-3">Switch Map Source</button>
+        <span id="map-status" class="font-weight-bold"></span>
+    </div>
+
+    <!-- Row 2: Add User Markers -->
+    <div class="d-flex align-items-center mb-3">
+        <button id="add-user-marker-button" class="btn btn-info mr-3">Add User Marker</button>
+        <button id="add-waypoint-button" class="btn btn-primary mr-3">Add Waypoint</button>
+        <button id="publish-waypoints-button" class="btn btn-warning mr-3">Publish Waypoints</button>    
+    </div>
+</div>
+
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -49,25 +63,45 @@
         // Listen for controller state updates
         socket.on('controller_state_update', function (data) {
             console.log('Controller state update received:', data);
-            document.getElementById('controllerState').textContent = data.state ? 'Enabled' : 'Disabled';
+            const controllerStateEl = document.getElementById('controllerState');
+            if (data.state) {
+                controllerStateEl.innerHTML = '<strong>Enabled</strong>';
+                controllerStateEl.style.color = 'green';
+            } else {
+                controllerStateEl.innerHTML = '<strong>Disabled</strong>';
+                controllerStateEl.style.color = 'red';
+            }
         });
 
         // Listen for helm state updates
         socket.on('helm_state_update', function (data) {
             console.log('Helm state update received:', data);
-            document.getElementById('currentState').textContent = data.current_state;
+            const currentStateEl = document.getElementById('currentState');
+            const state = data.current_state;
+
+            currentStateEl.innerHTML = `<strong>${state}</strong>`;
+
+            if (state === 'kill') {
+                currentStateEl.style.color = 'red';
+            } else if (state === 'start') {
+                currentStateEl.style.color = 'orange';
+            } else {
+                currentStateEl.style.color = 'green';
+            }
+
             const connectedStatesCell = document.getElementById('connectedStates');
             connectedStatesCell.innerHTML = ''; // Clear previous buttons
 
             // Corrected to use 'transitions' key which is sent from the ROS node
             (data.transitions || []).forEach(state => {
                 const form = document.createElement('form');
-                form.classList.add('d-inline', 'mr-2');
+                form.classList.add('d-inline', 'mr-2', 'mb-2');
                 form.dataset.state = state;
 
                 const button = document.createElement('button');
                 button.type = 'submit';
                 button.textContent = state;
+                button.classList.add('btn', 'btn-primary', 'btn'); // Added Bootstrap button classes
 
                 form.appendChild(button);
                 connectedStatesCell.appendChild(form);
@@ -88,13 +122,6 @@
         document.getElementById('enableForm').addEventListener('submit', function (event) {
             event.preventDefault();
             socket.emit('ros_action', { action: 'controller_state', value: true });
-        });
-
-        document.getElementById('publishForm').addEventListener('submit', function (event) {
-            event.preventDefault();
-            socket.emit('publish_waypoints_request');
-            // The line below was causing GPS trails to be erased when publishing. It has been removed.
-            // document.dispatchEvent(new CustomEvent('clear-history-trails'));
         });
     });
 </script>

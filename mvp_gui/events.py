@@ -140,6 +140,80 @@ def handle_dynamic_gps_update(data):
     
 # --- Handlers for events FROM browsers ---
 
+def _renumber_waypoints():
+    """
+    Helper function to re-number waypoint IDs to be sequential, starting from 1.
+    This should be called within an application context.
+    """
+    waypoints_data = [(w.lat, w.lon, w.alt, w.surge) for w in Waypoint.query.order_by(Waypoint.id).all()]
+    db.session.query(Waypoint).delete()
+    for i, data in enumerate(waypoints_data):
+        new_waypoint = Waypoint(id=i + 1, lat=data[0], lon=data[1], alt=data[2], surge=data[3])
+        db.session.add(new_waypoint)
+    db.session.commit()
+
+def _get_all_waypoints_payload():
+    """
+    Helper function to fetch all waypoints and return them as a JSON-serializable list.
+    This should be called within an application context.
+    """
+    all_waypoints = Waypoint.query.order_by(Waypoint.id).all()
+    return [
+        {"id": w.id, "lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} 
+        for w in all_waypoints
+    ]
+
+@sio_server.on('add_waypoint')
+def handle_add_waypoint(data):
+    """
+    Handles a request from a browser client to add a new waypoint.
+    Adds it to the database, renumbers all waypoints, and broadcasts the full list.
+    """
+    print(f"Received add waypoint request from sid={request.sid}: {data}")
+    with current_app.app_context():
+        new_waypoint = Waypoint(
+            lat=float(data.get('lat', 0)),
+            lon=float(data.get('lon', 0)),
+            alt=0.0,
+            surge=0.0
+        )
+        db.session.add(new_waypoint)
+        db.session.commit()
+        
+        _renumber_waypoints()
+        
+        waypoints_payload = _get_all_waypoints_payload()
+        sio_server.emit('waypoints_updated', {'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
+        print("Broadcasted updated waypoint list to all clients after adding.")
+
+@sio_server.on('delete_waypoint')
+def handle_delete_waypoint(data):
+    """
+    Handles a request from a browser client to delete a waypoint.
+    Deletes it, renumbers remaining waypoints, and broadcasts the full list.
+    """
+    waypoint_id = data.get('id')
+    print(f"Received delete waypoint request from sid={request.sid} for id={waypoint_id}")
+    if waypoint_id is None:
+        print("Error: Waypoint delete request missing 'id'.")
+        return
+
+    with current_app.app_context():
+        waypoint = Waypoint.query.get(int(waypoint_id))
+        
+        if waypoint:
+            db.session.delete(waypoint)
+            db.session.commit()
+            print(f"Waypoint {waypoint_id} deleted successfully.")
+
+            _renumber_waypoints()
+            
+            waypoints_payload = _get_all_waypoints_payload()
+            sio_server.emit('waypoints_updated', {'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
+            print("Broadcasted updated waypoint list to all clients after deleting.")
+        else:
+            print(f"Error: Waypoint with id {waypoint_id} not found for deletion.")
+
 @sio_server.on('update_waypoint')
 def handle_update_waypoint(data):
     """
@@ -149,7 +223,6 @@ def handle_update_waypoint(data):
     """
     print(f"Received waypoint update request from sid={request.sid}: {data}")
     with current_app.app_context():
-        # Use .get() with a default of None to avoid errors if 'id' is missing
         waypoint_id = data.get('id')
         if waypoint_id is None:
             print("Error: Waypoint update request missing 'id'.")
@@ -158,7 +231,6 @@ def handle_update_waypoint(data):
         waypoint = Waypoint.query.get(int(waypoint_id))
         
         if waypoint:
-            # Update waypoint fields from the received data
             waypoint.lat = float(data.get('lat', waypoint.lat))
             waypoint.lon = float(data.get('lon', waypoint.lon))
             waypoint.alt = float(data.get('alt', waypoint.alt))
@@ -166,14 +238,7 @@ def handle_update_waypoint(data):
             db.session.commit()
             print(f"Waypoint {waypoint_id} updated successfully.")
 
-            # After update, fetch the fresh, ordered list of all waypoints
-            all_waypoints = Waypoint.query.order_by(Waypoint.id).all()
-            waypoints_payload = [
-                {"id": w.id, "lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} 
-                for w in all_waypoints
-            ]
-            
-            # Broadcast the complete updated list to all clients in the room
+            waypoints_payload = _get_all_waypoints_payload()
             sio_server.emit('waypoints_updated', {'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
             print("Broadcasted updated waypoint list to all clients.")
         else:
@@ -199,7 +264,6 @@ def handle_publish_waypoints_request():
     with current_app.app_context():
         waypoints = Waypoint.query.order_by(Waypoint.id).all()
         waypoints_payload = [{"lat": w.lat, "lon": w.lon, "alt": w.alt, "surge": w.surge} for w in waypoints]
-        # Emit to the room. The ROS node is in the room and will receive this.
         sio_server.emit('ros_action', {'action': 'publish_waypoints', 'waypoints': waypoints_payload}, to=BROADCAST_ROOM)
 
 @sio_server.on('discover_gps_topics')
@@ -210,7 +274,6 @@ def handle_discover_gps_topics(data):
     and respond with the list of available topics.
     """
     print(f"Browser sid={request.sid} requested GPS topic discovery.")
-    # Emit to the room. The ROS node is in the room and will receive this.
     sio_server.emit('discover_gps_topics', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('subscribe_new_gps_topic')

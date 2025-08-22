@@ -5,10 +5,16 @@ Map View
 
 {% block content%}
 
-<h4>Mission Managers</h4>
-{% include "map_page/states_table.html" %}
+<div class="row">
+  <div class="col-lg-4">
+    <h4 class="mt-2">Mission Managers</h4>
+    {% include "map_page/states_table.html" %}
+  </div>
+  <div class="col-lg-8 mt-2">
+    {% include "map_page/map_table.html" %}
+  </div>
+</div>
 
-{% include "map_page/map_table.html" %}
 
 <!-- Waypoint Edit Modal -->
 <div class="modal fade" id="waypointEditModal" tabindex="-1" role="dialog" aria-labelledby="waypointEditModalLabel"
@@ -47,8 +53,49 @@ Map View
         </form>
       </div>
       <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-danger mr-auto" id="deleteWaypoint">Delete</button>
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
         <button type="button" class="btn btn-primary" id="saveWaypointChanges">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- User Marker Edit Modal -->
+<div class="modal fade" id="userMarkerEditModal" tabindex="-1" role="dialog" aria-labelledby="userMarkerEditModalLabel"
+  aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="userMarkerEditModalLabel">Edit User Marker</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="editUserMarkerForm">
+          <input type="hidden" id="userMarkerId" name="id">
+          <div class="form-group">
+            <label for="userMarkerName">Name</label>
+            <input type="text" class="form-control bg-secondary text-white border-dark" id="userMarkerName" name="name"
+              required>
+          </div>
+          <div class="form-group">
+            <label for="userMarkerLat">Latitude [deg]</label>
+            <input type="number" step="any" class="form-control bg-secondary text-white border-dark" id="userMarkerLat"
+              name="lat" required>
+          </div>
+          <div class="form-group">
+            <label for="userMarkerLon">Longitude [deg]</label>
+            <input type="number" step="any" class="form-control bg-secondary text-white border-dark" id="userMarkerLon"
+              name="lon" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-danger mr-auto" id="deleteUserMarker">Delete</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="saveUserMarkerChanges">Save changes</button>
       </div>
     </div>
   </div>
