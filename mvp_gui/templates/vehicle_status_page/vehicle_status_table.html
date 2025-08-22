@@ -1,153 +1,259 @@
-<h4>Vehicle Power Status</h4>
-<table class="table table-hover table-dark table-bordered">
-    <thead>
-        <tr>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">Voltage [V]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">Current [A]</th>
-        </tr>
-    </thead>
-    <tbody id="vital-data">
-        <tr>
-            <td id="voltage">N/A</td>
-            <td id="current">N/A</td>
-        </tr>
-    </tbody>
-</table>
+<style>
+    .status-card {
+        background-color: #343a40;
+        /* Bootstrap dark grey */
+        border: 1px solid #495057;
+        margin-bottom: 1.5rem;
+    }
 
-<h4>Vehicle Computer Status</h4>
-<table class="table table-hover table-dark table-bordered">
-    <thead>
-        <tr>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">CPU Temperature [C]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">CPU Usage [%]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">Memory Usage [%]</th>
+    .status-card .card-header {
+        background-color: #212529;
+        /* Bootstrap black */
+        font-weight: bold;
+        border-bottom: 1px solid #495057;
+    }
 
-        </tr>
-    </thead>
-    <tbody id="vital-data">
-        <tr>
-            <td id="cpu_temp">N/A</td>
-            <td id="cpu_usage">N/A</td>
-            <td id="mem_usage">N/A</td>
+    .status-table-full {
+        font-size: 1rem;
+    }
 
-        </tr>
-    </tbody>
-</table>
+    .status-table-full th,
+    .status-table-full td {
+        padding: 0.5rem 1rem;
+        text-align: left;
+        vertical-align: middle;
+    }
 
-<h4>Vehicle Geo Position</h4>
-<table class="table table-hover table-dark table-bordered">
-    <thead>
-        <tr>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">latitude [deg]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">longitude [deg]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">altitude [m]</th>
-        </tr>
-    </thead>
-    <tbody id="position-data">
-        <tr>
-            <td id="latitude">N/A</td>
-            <td id="longitude">N/A</td>
-            <td id="altitude">N/A</td>
-        </tr>
-    </tbody>
-</table>
+    .status-label-full {
+        font-weight: bold;
+        color: #adb5bd;
+        /* Light grey for labels */
+        width: 50%;
+    }
 
-<h4>Vehicle Pose</h4>
-<table class="table table-hover table-dark table-bordered">
-    <thead>
-        <tr>
-            <!-- <th scope="col" bgcolor="rgba(255, 255, 0)">frame_id</th> -->
-            <!-- <th scope="col" bgcolor="rgba(255, 255, 0)">child_frame_id</th> -->
-            <th scope="col" bgcolor="rgba(255, 255, 0)">x [m]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">y [m]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">z [m]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">roll [deg]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">pitch [deg]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">yaw [deg]</th>
-        </tr>
-    </thead>
-    <tbody id="pose-data">
-        <tr>
-            <!-- <td id="frame_id">N/A</td> -->
-            <!-- <td id="child_frame_id">N/A</td> -->
-            <td id="x">N/A</td>
-            <td id="y">N/A</td>
-            <td id="z">N/A</td>
-            <td id="roll">N/A</td>
-            <td id="pitch">N/A</td>
-            <td id="yaw">N/A</td>
-        </tr>
-    </tbody>
-</table>
+    .status-value-full {
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold;
+        font-size: 1.1rem;
+        text-align: right;
+    }
 
-<h4>Vehicle Velocity</h4>
-<table class="table table-hover table-dark table-bordered">
-    <thead>
-        <tr>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">u [m/s]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">v [m/s]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">w [m/s]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">p [deg/s]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">q [deg/s]</th>
-            <th scope="col" bgcolor="rgba(255, 255, 0)">r [deg/s]</th>
-        </tr>
-    </thead>
-    <tbody id="vel-data">
-        <tr>
-            <td id="u">N/A</td>
-            <td id="v">N/A</td>
-            <td id="w">N/A</td>
-            <td id="p">N/A</td>
-            <td id="q">N/A</td>
-            <td id="r">N/A</td>
-        </tr>
-    </tbody>
-</table>
+    .color-normal {
+        color: white;
+    }
+
+    .color-yellow {
+        color: #ffc107;
+    }
+
+    /* Bootstrap yellow */
+    .color-red {
+        color: #dc3545;
+    }
+
+    /* Bootstrap red */
+</style>
+
+<div class="row">
+    <!-- Left Column -->
+    <div class="col-md-6">
+        <!-- Vitals Card -->
+        <div class="card status-card text-white">
+            <div class="card-header">System Vitals</div>
+            <div class="card-body p-0">
+                <table class="table table-dark table-striped status-table-full mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="status-label-full">Voltage [V]</td>
+                            <td class="status-value-full" id="status-voltage">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Current [A]</td>
+                            <td class="status-value-full" id="status-current">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">CPU Temp [°C]</td>
+                            <td class="status-value-full" id="status-cpu_temp">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">CPU Usage [%]</td>
+                            <td class="status-value-full" id="status-cpu_usage">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Memory Usage [%]</td>
+                            <td class="status-value-full" id="status-mem_usage">N/A</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Position Card -->
+        <div class="card status-card text-white">
+            <div class="card-header">Position</div>
+            <div class="card-body p-0">
+                <table class="table table-dark table-striped status-table-full mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="status-label-full">Latitude [deg]</td>
+                            <td class="status-value-full" id="status-lat">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Longitude [deg]</td>
+                            <td class="status-value-full" id="status-lon">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Altitude [m]</td>
+                            <td class="status-value-full" id="status-alt">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">X (Local) [m]</td>
+                            <td class="status-value-full" id="status-x">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Y (Local) [m]</td>
+                            <td class="status-value-full" id="status-y">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Z (Local) [m]</td>
+                            <td class="status-value-full" id="status-z">N/A</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column -->
+    <div class="col-md-6">
+        <!-- Attitude Card -->
+        <div class="card status-card text-white">
+            <div class="card-header">Attitude</div>
+            <div class="card-body p-0">
+                <table class="table table-dark table-striped status-table-full mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="status-label-full">Roll [deg]</td>
+                            <td class="status-value-full" id="status-roll">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Pitch [deg]</td>
+                            <td class="status-value-full" id="status-pitch">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Yaw [deg]</td>
+                            <td class="status-value-full" id="status-yaw">N/A</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Velocity Card -->
+        <div class="card status-card text-white">
+            <div class="card-header">Velocity</div>
+            <div class="card-body p-0">
+                <table class="table table-dark table-striped status-table-full mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="status-label-full">Surge (u) [m/s]</td>
+                            <td class="status-value-full" id="status-u">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Sway (v) [m/s]</td>
+                            <td class="status-value-full" id="status-v">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Heave (w) [m/s]</td>
+                            <td class="status-value-full" id="status-w">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Roll Rate (p) [deg/s]</td>
+                            <td class="status-value-full" id="status-p">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Pitch Rate (q) [deg/s]</td>
+                            <td class="status-value-full" id="status-q">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Yaw Rate (r) [deg/s]</td>
+                            <td class="status-value-full" id="status-r">N/A</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // This code runs only after the page is fully loaded
+        const THRESHOLDS = JSON.parse('{{ status_thresholds_json|safe }}');
 
-        // Listen for 'power_info_update' event to update vitals
+        function getColorClass(value, thresholds, lowerIsWorse = false) {
+            if (thresholds) {
+                if (lowerIsWorse) {
+                    if (value <= thresholds.red) return 'color-red';
+                    if (value <= thresholds.yellow) return 'color-yellow';
+                } else {
+                    if (value >= thresholds.red) return 'color-red';
+                    if (value >= thresholds.yellow) return 'color-yellow';
+                }
+            }
+            return 'color-normal';
+        }
+
+        function updateElement(id, value, fixed = -1, thresholds, lowerIsWorse = false, useAbs = false) {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            let displayValue = parseFloat(value);
+            if (isNaN(displayValue)) {
+                el.textContent = 'N/A';
+                return;
+            }
+
+            el.textContent = fixed >= 0 ? displayValue.toFixed(fixed) : displayValue;
+
+            const valueForThreshold = useAbs ? Math.abs(displayValue) : displayValue;
+            const colorClass = getColorClass(valueForThreshold, thresholds, lowerIsWorse);
+
+            el.className = 'status-value-full'; // Reset classes
+            el.classList.add(colorClass);
+        }
+
         socket.on('power_info_update', function (data) {
-            console.log('Power update received:', data);
-            document.getElementById('voltage').textContent = data.voltage.toFixed(2);
-            document.getElementById('current').textContent = data.current.toFixed(2);
+            updateElement('status-voltage', data.voltage, 2, THRESHOLDS.voltage, true);
+            updateElement('status-current', data.current, 2, THRESHOLDS.current);
         });
 
-        // Listen for 'computer_info_update' event to update computer info
         socket.on('computer_info_update', function (data) {
-            console.log('Computer info update received:', data);
-            document.getElementById('cpu_temp').textContent = data.cpu_temp.toFixed(0);
-            document.getElementById('cpu_usage').textContent = data.cpu_usage.toFixed(0);
-            document.getElementById('mem_usage').textContent = data.mem_usage.toFixed(0);
+            updateElement('status-cpu_temp', data.cpu_temp, 0, THRESHOLDS.cpu_temp);
+            updateElement('status-cpu_usage', data.cpu_usage, 0, THRESHOLDS.cpu_usage);
+            updateElement('status-mem_usage', data.mem_usage, 0, THRESHOLDS.mem_usage);
         });
 
-        // Listen for 'vehicle_pose_update' event from the server
         socket.on('vehicle_pose_update', function (data) {
-            console.log('Vehicle pose update received:', data);
-            // Populate position data
-            document.getElementById('latitude').textContent = data.lat.toFixed(8);
-            document.getElementById('longitude').textContent = data.lon.toFixed(8);
-            document.getElementById('altitude').textContent = data.alt.toFixed(2);
+            // Position
+            updateElement('status-lat', data.lat, 8);
+            updateElement('status-lon', data.lon, 8);
+            updateElement('status-alt', data.alt, 2);
+            updateElement('status-x', data.x, 2);
+            updateElement('status-y', data.y, 2);
+            updateElement('status-z', data.z, 2);
 
-            // Populate pose data
-            // document.getElementById('frame_id').textContent = data.frame_id;
-            // document.getElementById('child_frame_id').textContent = data.child_frame_id;
-            document.getElementById('x').textContent = data.x.toFixed(2);
-            document.getElementById('y').textContent = data.y.toFixed(2);
-            document.getElementById('z').textContent = data.z.toFixed(2);
-            document.getElementById('roll').textContent = data.roll.toFixed(1);
-            document.getElementById('pitch').textContent = data.pitch.toFixed(1);
-            document.getElementById('yaw').textContent = data.yaw.toFixed(1);
+            // Attitude
+            updateElement('status-yaw', data.yaw, 1);
+            updateElement('status-roll', data.roll, 1, THRESHOLDS.roll, false, true); // useAbs = true
+            updateElement('status-pitch', data.pitch, 1, THRESHOLDS.pitch, false, true); // useAbs = true
 
-            // Populate twist data
-            document.getElementById('u').textContent = data.u.toFixed(2);
-            document.getElementById('v').textContent = data.v.toFixed(2);
-            document.getElementById('w').textContent = data.w.toFixed(2);
-            document.getElementById('p').textContent = data.p.toFixed(1);
-            document.getElementById('q').textContent = data.q.toFixed(1);
-            document.getElementById('r').textContent = data.r.toFixed(1);
+            // Velocity
+            updateElement('status-u', data.u, 2);
+            updateElement('status-v', data.v, 2);
+            updateElement('status-w', data.w, 2);
+            updateElement('status-p', data.p, 1);
+            updateElement('status-q', data.q, 1);
+            updateElement('status-r', data.r, 1);
         });
     });
 </script>

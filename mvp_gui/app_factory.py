@@ -1,8 +1,9 @@
-from flask import Flask
+from flask import Flask, current_app
 from .web_utils import db, sio_server
 import os
+import json
 
-def create_app(pkg_share_dir):
+def create_app(pkg_share_dir, status_thresholds=None):
     """
     Creates and configures the Flask application and its extensions.
     """
@@ -31,6 +32,9 @@ def create_app(pkg_share_dir):
     # A cache for dynamic data from the ROS node
     app.config['_launch_keys_cache'] = []
     app.config['_gps_topics_cache'] = []
+    
+    # A cache for status thresholds from the ROS params
+    app.config['STATUS_THRESHOLDS'] = status_thresholds or {}
 
     # Initialize extensions with the app
     db.init_app(app)
@@ -41,6 +45,23 @@ def create_app(pkg_share_dir):
         # Import models and create database tables
         from . import models
         db.create_all()
+
+        @app.context_processor
+        def inject_global_data():
+            """Injects data into all templates."""
+            waypoints = models.Waypoint.query.order_by(models.Waypoint.id).all()
+            thresholds = current_app.config.get('STATUS_THRESHOLDS', {})
+            initial_data = {
+                'vitals': {'voltage': 0, 'current': 0},
+                'computer_info': {'cpu_temp': 0, 'cpu_usage': 0, 'mem_usage': 0},
+                'poses': {'lat': 0, 'lon': 0, 'yaw': 0, 'z': 0},
+                'items': [],
+                'waypoints': waypoints,
+                'states': [],
+                'controller_state': {'state': 'Unknown'},
+                'status_thresholds_json': json.dumps(thresholds)
+            }
+            return initial_data
 
         # Import and register Blueprints for routes
         from .routes.routes_base import base_bp
