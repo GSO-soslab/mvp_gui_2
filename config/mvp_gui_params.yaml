@@ -7,6 +7,30 @@ flask_node:
     db_filename: "mvp_gui.db" # Database will be stored in the package share dir
     kml_upload_folder: "kml_uploads" # Also in package share dir
 
+    # Thresholds for color-coding vehicle status values
+    status_thresholds:
+      roll:
+        yellow: 20.0 # abs degrees
+        red: 40.0   # abs degrees
+      pitch:
+        yellow: 20.0 # abs degrees
+        red: 40.0   # abs degrees
+      voltage:
+        yellow: 18.0 # volts, lower is worse
+        red: 16.0    # volts, lower is worse
+      current:
+        yellow: 10.0 # amps, higher is worse
+        red: 15.0    # amps, higher is worse
+      cpu_temp:
+        yellow: 50.0 # Celsius, higher is worse
+        red: 65.0    # Celsius, higher is worse
+      cpu_usage:
+        yellow: 70.0 # percent, higher is worse
+        red: 90.0    # percent, higher is worse
+      mem_usage:
+        yellow: 70.0 # percent, higher is worse
+        red: 90.0    # percent, higher is worse
+
 ros_interface_node:
   ros__parameters:
     #----------------------------

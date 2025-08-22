@@ -1,4 +1,4 @@
-<table class="table table-hover table-dark">
+<table class="table table-hover table-dark mb-2">
     <thead>
         <tr>
             <th scope="col">Controller state</th>
@@ -11,19 +11,19 @@
             <td id="controllerState">Unknown</td>
             <td>
                 <form id="disableForm">
-                    <button type="submit" class="btn btn-danger">Disable</button>
+                    <button type="submit" class="btn btn-lg btn-danger font-weight-bold">Disable</button>
                 </form>
             </td>
             <td>
                 <form id="enableForm">
-                    <button type="submit" class="btn btn-success">Enable</button>
+                    <button type="submit" class="btn btn-lg btn-success font-weight-bold">Enable</button>
                 </form>
             </td>
         </tr>
     </tbody>
 </table>
 
-<table class="table table-hover table-dark">
+<table class="table table-hover table-dark mb-2">
     <thead>
         <tr>
             <th scope="col">Helm state</th>
@@ -38,23 +38,120 @@
     </tbody>
 </table>
 
-<h4 class="mt-2">Map Controls</h4>
-
-<div class="mb-3"> <!-- Container for all map interaction buttons -->
+<h5 class="mb-3">Map Controls</h5>
+<div> <!-- Container for all map interaction buttons -->
     <!-- Row 1: Map Source Control & User Marker -->
-    <div class="d-flex align-items-center mb-3">
-        <button id="map-switch-button" class="btn btn-secondary mr-3">Switch Map Source</button>
-        <span id="map-status" class="font-weight-bold"></span>
+    <div class="row align-items-center mb-4">
+        <div class="col">
+            <button id="map-switch-button" class="btn btn-secondary btn-sm">Switch Map Source</button>
+        </div>
+        <div class="col">
+            <span id="map-status"></span>
+        </div>
     </div>
 
-    <!-- Row 2: Add User Markers -->
-    <div class="d-flex align-items-center mb-3">
-        <button id="add-user-marker-button" class="btn btn-info mr-3">Add User Marker</button>
-        <button id="add-waypoint-button" class="btn btn-primary mr-3">Add Waypoint</button>
-        <button id="publish-waypoints-button" class="btn btn-warning mr-3">Publish Waypoints</button>    
+    <!-- Row 2: Add User Markers (Equal Width) -->
+    <div class="row mb-3">
+        <div class="col-sm-4">
+            <button id="add-user-marker-button" class="btn btn-info w-100">Add User Marker</button>
+        </div>
+        <div class="col-sm-4">
+            <button id="add-waypoint-button" class="btn btn-primary w-100">Add Waypoint</button>
+        </div>
+        <div class="col-sm-4">
+            <button id="publish-waypoints-button" class="btn btn-outline-warning font-weight-bold w-100">Publish Waypoints</button>
+        </div>
     </div>
 </div>
 
+<h5 class="mb-2">Vehicle Status</h5>
+<style>
+    .status-table-compact {
+        font-size: 0.9rem;
+    }
+
+    .status-table-compact th,
+    .status-table-compact td {
+        padding: 0.5rem;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .status-label {
+        font-weight: bold;
+        color: #adb5bd;
+    }
+
+    .status-value {
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold;
+        font-size: 0.9rem;
+    }
+
+    .color-normal {
+        color: white;
+    }
+
+    .color-yellow {
+        color: #ffc107;
+    }
+
+    /* Bootstrap yellow */
+    .color-red {
+        color: #dc3545;
+    }
+
+    /* Bootstrap red */
+</style>
+<div class="table-responsive">
+    <table class="table table-dark table-bordered status-table-compact mb-2">
+        <tbody>
+            <!-- Position -->
+            <tr>
+                <td class="status-label">Lat</td>
+                <td class="status-label">Lon</td>
+                <td class="status-label">Alt [m]</td>
+                <td class="status-label">Surge [m/s]</td>
+            </tr>
+            <tr>
+                <td class="status-value" id="status-lat">N/A</td>
+                <td class="status-value" id="status-lon">N/A</td>
+                <td class="status-value" id="status-alt">N/A</td>
+                <td class="status-value" id="status-u">N/A</td>
+            </tr>
+
+            <!-- Attitude -->
+            <tr>
+                <td class="status-label">Roll [°]</td>
+                <td class="status-label">Pitch [°]</td>
+                <td class="status-label">Yaw [°]</td>
+                <td class="status-label">&nbsp;</td> <!-- Spacer -->
+            </tr>
+            <tr>
+                <td class="status-value" id="status-roll">N/A</td>
+                <td class="status-value" id="status-pitch">N/A</td>
+                <td class="status-value" id="status-yaw">N/A</td>
+                <td>&nbsp;</td> <!-- Spacer -->
+            </tr>
+
+            <!-- Vitals -->
+            <tr>
+                <td class="status-label">Voltage [V]</td>
+                <td class="status-label">Current [A]</td>
+                <td class="status-label">CPU Temp [°C]</td>
+                <td class="status-label">CPU/Mem [%]</td>
+            </tr>
+            <tr>
+                <td class="status-value" id="status-voltage">N/A</td>
+                <td class="status-value" id="status-current">N/A</td>
+                <td class="status-value" id="status-cpu_temp">N/A</td>
+                <td class="status-value">
+                    <span id="status-cpu_usage">N/A</span>/<span id="status-mem_usage">N/A</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -66,10 +163,12 @@
             const controllerStateEl = document.getElementById('controllerState');
             if (data.state) {
                 controllerStateEl.innerHTML = '<strong>Enabled</strong>';
-                controllerStateEl.style.color = 'green';
+                // Use a brighter hex code for green
+                controllerStateEl.style.color = '#28a745'; 
             } else {
                 controllerStateEl.innerHTML = '<strong>Disabled</strong>';
-                controllerStateEl.style.color = 'red';
+                // Use a brighter hex code for red
+                controllerStateEl.style.color = '#dc3545';
             }
         });
 
@@ -82,35 +181,44 @@
             currentStateEl.innerHTML = `<strong>${state}</strong>`;
 
             if (state === 'kill') {
-                currentStateEl.style.color = 'red';
+                // Use a brighter hex code for red
+                currentStateEl.style.color = '#dc3545';
             } else if (state === 'start') {
                 currentStateEl.style.color = 'orange';
             } else {
-                currentStateEl.style.color = 'green';
+                // Use a brighter hex code for green
+                currentStateEl.style.color = '#28a745'; 
             }
 
             const connectedStatesCell = document.getElementById('connectedStates');
             connectedStatesCell.innerHTML = ''; // Clear previous buttons
 
             // Corrected to use 'transitions' key which is sent from the ROS node
+            // 1. Create a container for the button group
+            const btnGroup = document.createElement('div');
+            btnGroup.classList.add('btn-group', 'w-100'); // 'w-100' makes the group fill the cell
+            btnGroup.setAttribute('role', 'group');
+
             (data.transitions || []).forEach(state => {
-                const form = document.createElement('form');
-                form.classList.add('d-inline', 'mr-2', 'mb-2');
-                form.dataset.state = state;
-
+                // 2. Create the button directly (no form)
                 const button = document.createElement('button');
-                button.type = 'submit';
+                button.type = 'button'; // Use 'button' since it's not submitting a form
                 button.textContent = state;
-                button.classList.add('btn', 'btn-primary', 'btn'); // Added Bootstrap button classes
+                button.dataset.state = state; // Store the state on the button
+                button.classList.add('btn', 'btn-outline-light', 'font-weight-bold');
 
-                form.appendChild(button);
-                connectedStatesCell.appendChild(form);
-
-                form.addEventListener('submit', function (event) {
+                // 3. Add a 'click' listener to the button
+                button.addEventListener('click', function (event) {
                     event.preventDefault();
                     socket.emit('ros_action', { action: 'change_state', value: this.dataset.state });
                 });
+
+                btnGroup.appendChild(button);
             });
+
+            // 4. Append the single button group to the cell
+            connectedStatesCell.appendChild(btnGroup);
+
         });
 
         // Handle form submissions with JavaScript
@@ -122,6 +230,63 @@
         document.getElementById('enableForm').addEventListener('submit', function (event) {
             event.preventDefault();
             socket.emit('ros_action', { action: 'controller_state', value: true });
+        });
+
+        // --- VEHICLE STATUS SCRIPT ---
+        const THRESHOLDS = JSON.parse('{{ status_thresholds_json|safe }}');
+
+        function getColorClass(value, thresholds, lowerIsWorse = false) {
+            if (thresholds) {
+                if (lowerIsWorse) {
+                    if (value <= thresholds.red) return 'color-red';
+                    if (value <= thresholds.yellow) return 'color-yellow';
+                } else {
+                    if (value >= thresholds.red) return 'color-red';
+                    if (value >= thresholds.yellow) return 'color-yellow';
+                }
+            }
+            return 'color-normal';
+        }
+
+        function updateStatusElement(id, value, fixed = -1, thresholds, lowerIsWorse = false, useAbs = false) {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            let displayValue = parseFloat(value);
+            if (isNaN(displayValue)) {
+                el.textContent = 'N/A';
+                return;
+            }
+
+            el.textContent = fixed >= 0 ? displayValue.toFixed(fixed) : displayValue;
+
+            const valueForThreshold = useAbs ? Math.abs(displayValue) : displayValue;
+            const colorClass = getColorClass(valueForThreshold, thresholds, lowerIsWorse);
+
+            el.className = 'status-value'; // Reset classes
+            el.classList.add(colorClass);
+        }
+
+        socket.on('power_info_update', function (data) {
+            updateStatusElement('status-voltage', data.voltage, 2, THRESHOLDS.voltage, true);
+            updateStatusElement('status-current', data.current, 2, THRESHOLDS.current);
+        });
+
+        socket.on('computer_info_update', function (data) {
+            updateStatusElement('status-cpu_temp', data.cpu_temp, 0, THRESHOLDS.cpu_temp);
+            updateStatusElement('status-cpu_usage', data.cpu_usage, 0, THRESHOLDS.cpu_usage);
+            updateStatusElement('status-mem_usage', data.mem_usage, 0, THRESHOLDS.mem_usage);
+        });
+
+        socket.on('vehicle_pose_update', function (data) {
+            updateStatusElement('status-lat', data.lat, 6);
+            updateStatusElement('status-lon', data.lon, 6);
+            updateStatusElement('status-alt', data.alt, 2);
+            updateStatusElement('status-u', data.u, 2); // Surge velocity
+            updateStatusElement('status-yaw', data.yaw, 1);
+
+            updateStatusElement('status-roll', data.roll, 1, THRESHOLDS.roll, false, true); // useAbs = true
+            updateStatusElement('status-pitch', data.pitch, 1, THRESHOLDS.pitch, false, true); // useAbs = true
         });
     });
 </script>
