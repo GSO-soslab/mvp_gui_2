@@ -110,14 +110,12 @@
             <tr>
                 <td class="status-label">Lat</td>
                 <td class="status-label">Lon</td>
-                <td class="status-label">Alt [m]</td>
-                <td class="status-label">Surge [m/s]</td>
+                <td class="status-label">Altitude [m]</td>
             </tr>
             <tr>
                 <td class="status-value" id="status-lat">N/A</td>
                 <td class="status-value" id="status-lon">N/A</td>
                 <td class="status-value" id="status-alt">N/A</td>
-                <td class="status-value" id="status-u">N/A</td>
             </tr>
 
             <!-- Attitude -->
@@ -125,30 +123,49 @@
                 <td class="status-label">Roll [°]</td>
                 <td class="status-label">Pitch [°]</td>
                 <td class="status-label">Yaw [°]</td>
-                <td class="status-label">&nbsp;</td> <!-- Spacer -->
+                <!-- <td class="status-label">&nbsp;</td> Spacer -->
             </tr>
             <tr>
                 <td class="status-value" id="status-roll">N/A</td>
                 <td class="status-value" id="status-pitch">N/A</td>
                 <td class="status-value" id="status-yaw">N/A</td>
-                <td>&nbsp;</td> <!-- Spacer -->
+                <!-- <td>&nbsp;</td> Spacer -->
+            </tr>
+
+            <!-- Velocity -->
+            <tr>
+                <td class="status-label">Surge [m/s]</td>
+                <td class="status-label">Sway [m/s]</td>
+                <td class="status-label">Heave [m/s]</td>
+            </tr>
+            <tr>
+                <td class="status-value" id="status-surge">N/A</td>
+                <td class="status-value" id="status-sway">N/A</td>
+                <td class="status-value" id="status-heave">N/A</td>
             </tr>
 
             <!-- Vitals -->
             <tr>
                 <td class="status-label">Voltage [V]</td>
                 <td class="status-label">Current [A]</td>
-                <td class="status-label">CPU Temp [°C]</td>
-                <td class="status-label">CPU/Mem [%]</td>
             </tr>
             <tr>
                 <td class="status-value" id="status-voltage">N/A</td>
                 <td class="status-value" id="status-current">N/A</td>
-                <td class="status-value" id="status-cpu_temp">N/A</td>
-                <td class="status-value">
-                    <span id="status-cpu_usage">N/A</span>/<span id="status-mem_usage">N/A</span>
-                </td>
             </tr>
+
+            <!-- Usage -->
+            <tr>
+                <td class="status-label">CPU Temp [°C]</td>
+                <td class="status-label">CPU Usage [%]</td>
+                <td class="status-label">Mem Usage [%]</td>
+            </tr>
+            <tr>
+                <td class="status-value" id="status-cpu_temp">N/A</td>
+                <td class="status-value" id="status-cpu_usage">N/A</td>
+                <td class="status-value" id="status-mem_usage">N/A</td>
+            </tr>
+
         </tbody>
     </table>
 </div>
@@ -282,9 +299,12 @@
             updateStatusElement('status-lat', data.lat, 6);
             updateStatusElement('status-lon', data.lon, 6);
             updateStatusElement('status-alt', data.alt, 2);
-            updateStatusElement('status-u', data.u, 2); // Surge velocity
-            updateStatusElement('status-yaw', data.yaw, 1);
 
+            updateStatusElement('status-surge', data.u, 2);
+            updateStatusElement('status-sway', data.v, 2);
+            updateStatusElement('status-heave', data.w, 2);
+
+            updateStatusElement('status-yaw', data.yaw, 1);
             updateStatusElement('status-roll', data.roll, 1, THRESHOLDS.roll, false, true); // useAbs = true
             updateStatusElement('status-pitch', data.pitch, 1, THRESHOLDS.pitch, false, true); // useAbs = true
         });
