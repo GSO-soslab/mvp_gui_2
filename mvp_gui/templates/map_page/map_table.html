@@ -301,6 +301,8 @@
     let lastPublishedPath = []; // Holds the most recent path data for runtime use
     let editableWaypointsData = {{ items_jsn | safe }}; // Use 'let' to allow modification
     const serverUrlRoot = "{{ request.url_root }}"; // Gets the app's root URL, e.g., "http://127.0.0.1:5001/"
+    let editablePathTotalDistance = 0;
+    let publishedPathTotalDistance = 0;
 
     // --- Marker Storage ---
     let vehicleMarker, topsideMarker, secondaryMarker;
@@ -414,6 +416,32 @@
         return `/${namespaceShorthand}/${secondLastShort}/${lastShort}`;
     }
 
+    function haversineDistance(p1, p2) {
+        function toRad(x) { return x * Math.PI / 180; }
+        const R = 6371e3; // Earth's radius in metres
+        const lat1_Rad = toRad(p1.lat);
+        const lat2_Rad = toRad(p2.lat);
+        const delta_lat_Rad = toRad(p2.lat - p1.lat);
+        const delta_lon_Rad = toRad(p2.lon - p1.lon);
+
+        const a = Math.sin(delta_lat_Rad / 2) * Math.sin(delta_lat_Rad / 2) +
+            Math.cos(lat1_Rad) * Math.cos(lat2_Rad) *
+            Math.sin(delta_lon_Rad / 2) * Math.sin(delta_lon_Rad / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // distance in meters
+    }
+
+    function calculateTotalDistance(pathPoints) {
+        let totalDistance = 0;
+        if (!pathPoints || pathPoints.length < 2) {
+            return 0;
+        }
+        for (let i = 1; i < pathPoints.length; i++) {
+            totalDistance += haversineDistance(pathPoints[i - 1], pathPoints[i]);
+        }
+        return totalDistance;
+    }
+
     function updateLegend() {
         const legendItemsContainer = document.getElementById('legend-items');
         if (!legendItemsContainer) return;
@@ -423,8 +451,8 @@
         // Static items
         const staticItems = [
             { color: '#44e215', label: 'Vehicle Path' },
-            { color: '#ff190a', label: 'Editable Mission Path' },
-            { color: '#ffd500', label: 'Published Mission Path' }
+            { color: '#ff190a', label: `Editable Mission: ${editablePathTotalDistance.toFixed(1)} m` },
+            { color: '#ffd500', label: `Published Mission: ${publishedPathTotalDistance.toFixed(1)} m` }
         ];
 
         staticItems.forEach(item => {
@@ -454,31 +482,7 @@
     }
 
     function calculateMidpoint(p1, p2) {
-        // Haversine formula to calculate distance
-        function toRad(x) {
-            return x * Math.PI / 180;
-        }
-
-        const R = 6371e3; // Earth's radius in metres
-        const lat1 = p1.lat;
-        const lon1 = p1.lon;
-        const lat2 = p2.lat;
-        const lon2 = p2.lon;
-
-        // Convert latitude and longitude from degrees to radians
-        const lat1_Rad = toRad(lat1);
-        const lat2_Rad = toRad(lat2);
-        const delta_lat_Rad = toRad(lat2 - lat1);
-        const delta_lon_Rad = toRad(lon2 - lon1);
-
-        // --- Haversine Formula for surface distance ---
-        const a = Math.sin(delta_lat_Rad / 2) * Math.sin(delta_lat_Rad / 2) +
-                  Math.cos(lat1_Rad) * Math.cos(lat2_Rad) *
-                  Math.sin(delta_lon_Rad / 2) * Math.sin(delta_lon_Rad / 2);
-
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        
-        const distance = R * c;
+        const distance = haversineDistance(p1, p2);
 
         return {
             latitude: (p1.lat + p2.lat) / 2,
@@ -797,6 +801,10 @@
             // We just need to ensure the vehicle point in our array has a surge property for consistency.
             pathPoints.unshift({ lat: currentVehiclePose.lat, lon: currentVehiclePose.lon, alt: currentVehiclePose.alt || 0, surge: currentVehiclePose.u || 0 });
         }
+
+        editablePathTotalDistance = calculateTotalDistance(pathPoints);
+        updateLegend();
+
         const lineCoords = pathPoints.map(p => [p.lon, p.lat]);
         map.getSource('editable-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
         for (let i = 1; i < pathPoints.length; i++) {
@@ -974,6 +982,12 @@
         publishedAltitudeMarkers = [];
         // This is the GeoPath data from ROS: [vehicle_pose, wp1_ros, wp2_ros, ...]
         const canonicalPath = lastPublishedPath || [];
+
+        // The ROS node might send 'u' for surge, so handle both 'surge' and 'u' robustly.
+        let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge ?? p.u ?? 0 }));
+        publishedPathTotalDistance = calculateTotalDistance(linePoints);
+        updateLegend();
+
         if (canonicalPath.length === 0) {
             map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
             return;
@@ -986,8 +1000,6 @@
             }).setLngLat([point.lon, point.lat]).addTo(map));
         });
         // 2. The line's path points are also directly from the GeoPath message.
-        // The ROS node might send 'u' for surge, so handle both 'surge' and 'u' robustly.
-        let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge ?? p.u ?? 0 }));
         // 3. Set the data for the line layer on the map.
         const lineCoords = linePoints.map(p => [p.lon, p.lat]);
         map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
@@ -1015,6 +1027,7 @@
         if (isMapInitialized) {
             updateVehicle(data);
             redrawAllTrails();
+            updateEditablePathLine();
         }
     });
 
