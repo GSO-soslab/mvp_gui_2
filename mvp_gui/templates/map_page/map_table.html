@@ -113,7 +113,7 @@
         text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
         z-index: 5;
         line-height: 1.1;
-        /* Adjust for two lines of text */
+        /* Adjust for multiple lines of text */
     }
 
     .altitude-label-marker.published {
@@ -454,11 +454,38 @@
     }
 
     function calculateMidpoint(p1, p2) {
+        // Haversine formula to calculate distance
+        function toRad(x) {
+            return x * Math.PI / 180;
+        }
+
+        const R = 6371e3; // Earth's radius in metres
+        const lat1 = p1.lat;
+        const lon1 = p1.lon;
+        const lat2 = p2.lat;
+        const lon2 = p2.lon;
+
+        // Convert latitude and longitude from degrees to radians
+        const lat1_Rad = toRad(lat1);
+        const lat2_Rad = toRad(lat2);
+        const delta_lat_Rad = toRad(lat2 - lat1);
+        const delta_lon_Rad = toRad(lon2 - lon1);
+
+        // --- Haversine Formula for surface distance ---
+        const a = Math.sin(delta_lat_Rad / 2) * Math.sin(delta_lat_Rad / 2) +
+                  Math.cos(lat1_Rad) * Math.cos(lat2_Rad) *
+                  Math.sin(delta_lon_Rad / 2) * Math.sin(delta_lon_Rad / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        
+        const distance = R * c;
+
         return {
             latitude: (p1.lat + p2.lat) / 2,
             longitude: (p1.lon + p2.lon) / 2,
             altitude: p2.alt,
-            surge: p2.surge // The surge of the destination waypoint.
+            surge: p2.surge, // The surge of the destination waypoint.
+            distance: distance // The calculated distance in meters.
         };
     }
 
@@ -466,9 +493,10 @@
         const el = document.createElement('div');
         el.className = `altitude-label-marker ${type}`; // e.g., 'editable' or 'published'
         el.style.color = color;
-        // Use innerHTML to create two lines for altitude (z) and surge (u)
+        // Use innerHTML to create three lines for altitude (z), surge (u), and distance (d)
         const surgeValue = midpoint.surge ?? 0;
-        el.innerHTML = `z: ${midpoint.altitude.toFixed(1)}m<br>u: ${surgeValue.toFixed(1)}m/s`;
+        const distanceValue = midpoint.distance ?? 0;
+        el.innerHTML = `z: ${midpoint.altitude.toFixed(1)}m<br>u: ${surgeValue.toFixed(1)}m/s<br>d: ${distanceValue.toFixed(1)}m`;
         return new maplibregl.Marker({
             element: el,
             anchor: 'center'
