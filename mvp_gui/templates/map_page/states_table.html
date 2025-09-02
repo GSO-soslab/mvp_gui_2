@@ -59,7 +59,8 @@
             <button id="add-waypoint-button" class="btn btn-primary w-100">Add Waypoint</button>
         </div>
         <div class="col-sm-4">
-            <button id="publish-waypoints-button" class="btn btn-outline-warning font-weight-bold w-100">Publish Waypoints</button>
+            <button id="publish-waypoints-button" class="btn btn-outline-warning font-weight-bold w-100">Publish
+                Waypoints</button>
         </div>
     </div>
 </div>
@@ -67,25 +68,45 @@
 <h5 class="mb-2">Vehicle Status</h5>
 <style>
     .status-table-compact {
-        font-size: 0.9rem;
+        font-size: 0.95rem;
+        table-layout: fixed;
+        /* Helps with consistent column widths */
     }
 
     .status-table-compact th,
     .status-table-compact td {
-        padding: 0.5rem;
-        text-align: center;
+        padding: 0.4rem;
         vertical-align: middle;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .status-group-header {
+        padding: 0rem;
+        font-size: 0.9rem;
+        text-align: center;
+        font-weight: bold;
+        color: #6c757d;
+        background-color: #343a40;
     }
 
     .status-label {
         font-weight: bold;
         color: #adb5bd;
+        text-align: center;
     }
 
     .status-value {
         font-family: 'Courier New', Courier, monospace;
         font-weight: bold;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
+        text-align: center;
+    }
+
+    .status-value .sign {
+        display: inline-block;
+        width: 1ch;
+        text-align: center;
     }
 
     .color-normal {
@@ -106,66 +127,68 @@
 <div class="table-responsive">
     <table class="table table-dark table-bordered status-table-compact mb-2">
         <tbody>
-            <!-- Position -->
+            <!-- Position Group -->
             <tr>
-                <td class="status-label">Lat</td>
-                <td class="status-label">Lon</td>
-                <td class="status-label">Altitude [m]</td>
+                <td colspan="4" class="status-group-header">Position</td>
             </tr>
             <tr>
+                <td class="status-label">Latitude</td>
                 <td class="status-value" id="status-lat">N/A</td>
+                <td class="status-label">Longitude</td>
                 <td class="status-value" id="status-lon">N/A</td>
+            </tr>
+            <tr>
+                <td class="status-label">Altitude [m]</td>
                 <td class="status-value" id="status-alt">N/A</td>
+                <td class="status-label">Altimeter [m]</td>
+                <td class="status-value" id="status-altimeter">N/A</td>
             </tr>
 
-            <!-- Attitude -->
+            <!-- Attitude & Velocity Group -->
+            <tr>
+                <td colspan="4" class="status-group-header">Attitude & Velocity</td>
+            </tr>
             <tr>
                 <td class="status-label">Roll [°]</td>
-                <td class="status-label">Pitch [°]</td>
-                <td class="status-label">Yaw [°]</td>
-                <!-- <td class="status-label">&nbsp;</td> Spacer -->
-            </tr>
-            <tr>
                 <td class="status-value" id="status-roll">N/A</td>
-                <td class="status-value" id="status-pitch">N/A</td>
-                <td class="status-value" id="status-yaw">N/A</td>
-                <!-- <td>&nbsp;</td> Spacer -->
-            </tr>
-
-            <!-- Velocity -->
-            <tr>
                 <td class="status-label">Surge [m/s]</td>
-                <td class="status-label">Sway [m/s]</td>
-                <td class="status-label">Heave [m/s]</td>
+                <td class="status-value" id="status-surge">N/A</td>
             </tr>
             <tr>
-                <td class="status-value" id="status-surge">N/A</td>
+                <td class="status-label">Pitch [°]</td>
+                <td class="status-value" id="status-pitch">N/A</td>
+                <td class="status-label">Sway [m/s]</td>
                 <td class="status-value" id="status-sway">N/A</td>
+            </tr>
+            <tr>
+                <td class="status-label">Yaw [°]</td>
+                <td class="status-value" id="status-yaw">N/A</td>
+                <td class="status-label">Heave [m/s]</td>
                 <td class="status-value" id="status-heave">N/A</td>
             </tr>
 
-            <!-- Vitals -->
+            <!-- Vitals & System Group -->
+            <tr>
+                <td colspan="4" class="status-group-header">Vitals & System</td>
+            </tr>
             <tr>
                 <td class="status-label">Voltage [V]</td>
-                <td class="status-label">Current [A]</td>
-            </tr>
-            <tr>
                 <td class="status-value" id="status-voltage">N/A</td>
-                <td class="status-value" id="status-current">N/A</td>
-            </tr>
-
-            <!-- Usage -->
-            <tr>
                 <td class="status-label">CPU Temp [°C]</td>
-                <td class="status-label">CPU Usage [%]</td>
-                <td class="status-label">Mem Usage [%]</td>
+                <td class="status-value" id="status-cpu_temp">N/A</td>
             </tr>
             <tr>
-                <td class="status-value" id="status-cpu_temp">N/A</td>
+                <td class="status-label">Current [A]</td>
+                <td class="status-value" id="status-current">N/A</td>
+                <td class="status-label">CPU Usage [%]</td>
                 <td class="status-value" id="status-cpu_usage">N/A</td>
+            </tr>
+            <tr>
+                <td></td><!-- Empty cell for alignment -->
+                <td></td><!-- Empty cell for alignment -->
+                <td class="status-label">Mem Usage [%]</td>
                 <td class="status-value" id="status-mem_usage">N/A</td>
             </tr>
-
         </tbody>
     </table>
 </div>
@@ -181,7 +204,7 @@
             if (data.state) {
                 controllerStateEl.innerHTML = '<strong>Enabled</strong>';
                 // Use a brighter hex code for green
-                controllerStateEl.style.color = '#28a745'; 
+                controllerStateEl.style.color = '#28a745';
             } else {
                 controllerStateEl.innerHTML = '<strong>Disabled</strong>';
                 // Use a brighter hex code for red
@@ -204,7 +227,7 @@
                 currentStateEl.style.color = 'orange';
             } else {
                 // Use a brighter hex code for green
-                currentStateEl.style.color = '#28a745'; 
+                currentStateEl.style.color = '#28a745';
             }
 
             const connectedStatesCell = document.getElementById('connectedStates');
@@ -275,7 +298,15 @@
                 return;
             }
 
-            el.textContent = fixed >= 0 ? displayValue.toFixed(fixed) : displayValue;
+            let formattedValue = fixed >= 0 ? displayValue.toFixed(fixed) : displayValue.toString();
+            let sign = '&nbsp;';
+            let numStr = formattedValue;
+
+            if (formattedValue.startsWith('-')) {
+                sign = '-';
+                numStr = formattedValue.substring(1);
+            }
+            el.innerHTML = `<span class="sign">${sign}</span><span>${numStr}</span>`;
 
             const valueForThreshold = useAbs ? Math.abs(displayValue) : displayValue;
             const colorClass = getColorClass(valueForThreshold, thresholds, lowerIsWorse);
@@ -307,6 +338,10 @@
             updateStatusElement('status-yaw', data.yaw, 1);
             updateStatusElement('status-roll', data.roll, 1, THRESHOLDS.roll, false, true); // useAbs = true
             updateStatusElement('status-pitch', data.pitch, 1, THRESHOLDS.pitch, false, true); // useAbs = true
+        });
+
+        socket.on('altimeter_update', function (data) {
+            updateStatusElement('status-altimeter', data.altimeter_range, 2, THRESHOLDS.altimeter, true, true);
         });
     });
 </script>

@@ -28,6 +28,7 @@ class FlaskNode(Node):
             parameters=[
                 ('roll.yellow', 15.0), ('roll.red', 30.0),
                 ('pitch.yellow', 10.0), ('pitch.red', 20.0),
+                ('altimeter.yellow', 3.0), ('altimeter.red', 1.0),
                 ('voltage.yellow', 11.5), ('voltage.red', 11.0),
                 ('current.yellow', 10.0), ('current.red', 15.0),
                 ('cpu_temp.yellow', 75.0), ('cpu_temp.red', 85.0),
@@ -36,7 +37,7 @@ class FlaskNode(Node):
             ]
         )
         param_keys = [
-            'roll.yellow', 'roll.red', 'pitch.yellow', 'pitch.red',
+            'roll.yellow', 'roll.red', 'pitch.yellow', 'pitch.red', 'altimeter.yellow', 'altimeter.red',
             'voltage.yellow', 'voltage.red', 'current.yellow', 'current.red',
             'cpu_temp.yellow', 'cpu_temp.red', 'cpu_usage.yellow', 'cpu_usage.red',
             'mem_usage.yellow', 'mem_usage.red',

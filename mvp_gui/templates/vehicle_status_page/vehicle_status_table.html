@@ -38,6 +38,12 @@
         text-align: right;
     }
 
+    .status-value-full .sign {
+        display: inline-block;
+        width: 1ch;
+        text-align: center;
+    }
+
     .color-normal {
         color: white;
     }
@@ -105,6 +111,10 @@
                         <tr>
                             <td class="status-label-full">Altitude [m]</td>
                             <td class="status-value-full" id="status-alt">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Altimeter Range [m]</td>
+                            <td class="status-value-full" id="status-altimeter">N/A</td>
                         </tr>
                         <tr>
                             <td class="status-label-full">X (Local) [m]</td>
@@ -213,7 +223,15 @@
                 return;
             }
 
-            el.textContent = fixed >= 0 ? displayValue.toFixed(fixed) : displayValue;
+            let formattedValue = fixed >= 0 ? displayValue.toFixed(fixed) : displayValue.toString();
+            let sign = '&nbsp;';
+            let numStr = formattedValue;
+
+            if (formattedValue.startsWith('-')) {
+                sign = '-';
+                numStr = formattedValue.substring(1);
+            }
+            el.innerHTML = `<span class="sign">${sign}</span><span>${numStr}</span>`;
 
             const valueForThreshold = useAbs ? Math.abs(displayValue) : displayValue;
             const colorClass = getColorClass(valueForThreshold, thresholds, lowerIsWorse);
@@ -254,6 +272,10 @@
             updateElement('status-p', data.p, 1);
             updateElement('status-q', data.q, 1);
             updateElement('status-r', data.r, 1);
+        });
+
+        socket.on('altimeter_update', function (data) {
+            updateElement('status-altimeter', data.altimeter_range, 2, THRESHOLDS.altimeter, true, true);
         });
     });
 </script>

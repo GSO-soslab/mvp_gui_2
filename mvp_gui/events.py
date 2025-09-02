@@ -9,6 +9,7 @@ BROADCAST_ROOM = 'all_clients_room'
 # --- Server-side cache for stateful data ---
 last_published_path = []
 last_vehicle_pose = None # Cache for vehicle pose
+last_altimeter_range = None # Cache for vehicle altimeter range
 last_launch_status = None # Cache for launch status
 
 # --- Handlers for built-in events ---
@@ -26,6 +27,8 @@ def handle_connect():
         sio_server.emit('published_path_update', last_published_path, to=request.sid)
     if last_vehicle_pose:
         sio_server.emit('vehicle_pose_update', last_vehicle_pose, to=request.sid)
+    if last_altimeter_range:
+        sio_server.emit('altimeter_update', last_altimeter_range, to=request.sid)
 
     # Send cached GPS topics if they exist
     cached_gps_topics = current_app.config.get('_gps_topics_cache', [])
@@ -56,9 +59,16 @@ def handle_disconnect():
 @sio_server.on('vehicle_pose_update')
 def handle_vehicle_pose_update(data):
     """Relay vehicle pose from ROS node to all browser clients in the room and cache it."""
-    global last_vehicle_pose
-    last_vehicle_pose = data # Store the latest pose
+    global last_altimeter_range
+    last_altimeter_range = data # Store the latest pose
     sio_server.emit('vehicle_pose_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('altimeter_update')
+def handle_altimeter_update(data):
+    """Relay vehicle pose from ROS node to all browser clients in the room and cache it."""
+    global last_vehicle_pose
+    last_vehicle_pose = data # Store the latest altimeter range
+    sio_server.emit('altimeter_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('power_update')
 def handle_power_update(data):

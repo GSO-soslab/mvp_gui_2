@@ -12,6 +12,7 @@ from geographic_msgs.msg import GeoPoseStamped
 from sensor_msgs.msg import NavSatFix
 from mvp_msgs.msg import Waypoint, Waypoints, HelmState
 from std_msgs.msg import Float32MultiArray, Bool, Int16MultiArray
+from geometry_msgs.msg import PointStamped
 from tf_transformations import euler_from_quaternion
 from mvp_msgs.srv import SetString, SendWaypoints
 from std_srvs.srv import SetBool
@@ -33,6 +34,7 @@ class RosInterfaceNode(Node):
                 ('service_ns', '/default_ns/'),
                 ('poses_source', 'odometry'),
                 ('geo_pose_source', 'geopose'),
+                ('altimeter_source', 'altimeter'),
                 ('survey_geopath_source', 'survey/geopath'),
                 ('helm_state_get', 'helm/state'),
                 ('controller_state_get', 'controller_state'),
@@ -108,6 +110,7 @@ class RosInterfaceNode(Node):
         self.get_logger().info(f"Synchronizing pose on odom topic '{odom_topic}' and geopose topic '{geopose_topic}'.")
         
         # --- Other Subscribers ---
+        self.create_subscription(PointStamped, self.get_topic('altimeter_source'), self.altimeter_info_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Float32MultiArray, self.get_topic('power_info_source'), self.power_info_callback, 10, callback_group=self.callback_group)
         self.create_subscription(Float32MultiArray, self.get_topic('computer_info_source'), self.computer_info_callback, 10, callback_group=self.callback_group)
         self.create_subscription(HelmState, self.get_topic('helm_state_get'), self.helm_state_callback, 10, callback_group=self.callback_group)
@@ -235,9 +238,15 @@ class RosInterfaceNode(Node):
                 self.sio.emit('gps_topic_unsubscribed', {'topic': topic_name})
 
     def survey_geopath_callback(self, msg):
-        if not self.sio.connected: return
+        if not self.sio.connected:
+            return
         path_data = [{'lat': w.ll_wpt.latitude, 'lon': w.ll_wpt.longitude, 'alt': w.ll_wpt.altitude, 'surge': w.u} for w in msg.wpt]
         self.sio.emit('published_path_update', path_data)
+
+    def altimeter_info_callback(self, msg):
+        if not self.sio.connected:
+            return
+        self.sio.emit('altimeter_update', {'altimeter_range': msg.point.z})
 
     def roslaunch_state_callback(self, msg):
         if not self.sio.connected: 
