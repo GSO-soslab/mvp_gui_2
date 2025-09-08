@@ -26,14 +26,14 @@ class FlaskNode(Node):
         self.declare_parameters(
             namespace='status_thresholds',
             parameters=[
-                ('roll.yellow', 15.0), ('roll.red', 30.0),
-                ('pitch.yellow', 10.0), ('pitch.red', 20.0),
-                ('altimeter.yellow', 3.0), ('altimeter.red', 1.0),
-                ('voltage.yellow', 11.5), ('voltage.red', 11.0),
+                ('roll.yellow', 20.0), ('roll.red', 40.0),
+                ('pitch.yellow', 20.0), ('pitch.red', 40.0),
+                ('altimeter.yellow', 4.0), ('altimeter.red', 2.0),
+                ('voltage.yellow', 18.0), ('voltage.red', 16.0),
                 ('current.yellow', 10.0), ('current.red', 15.0),
-                ('cpu_temp.yellow', 75.0), ('cpu_temp.red', 85.0),
-                ('cpu_usage.yellow', 80.0), ('cpu_usage.red', 95.0),
-                ('mem_usage.yellow', 80.0), ('mem_usage.red', 95.0),
+                ('cpu_temp.yellow', 55.0), ('cpu_temp.red', 65.0),
+                ('cpu_usage.yellow', 75.0), ('cpu_usage.red', 90.0),
+                ('mem_usage.yellow', 75.0), ('mem_usage.red', 90.0),
             ]
         )
         param_keys = [

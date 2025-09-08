@@ -16,8 +16,8 @@ flask_node:
         yellow: 20.0 # abs degrees
         red: 40.0   # abs degrees
       altimeter:
-        yellow: 3.0
-        red: 1.0
+        yellow: 4.0
+        red: 2.0
       voltage:
         yellow: 18.0 # volts, lower is worse
         red: 16.0    # volts, lower is worse
@@ -25,13 +25,13 @@ flask_node:
         yellow: 10.0 # amps, higher is worse
         red: 15.0    # amps, higher is worse
       cpu_temp:
-        yellow: 50.0 # Celsius, higher is worse
+        yellow: 55.0 # Celsius, higher is worse
         red: 65.0    # Celsius, higher is worse
       cpu_usage:
-        yellow: 70.0 # percent, higher is worse
+        yellow: 75.0 # percent, higher is worse
         red: 90.0    # percent, higher is worse
       mem_usage:
-        yellow: 70.0 # percent, higher is worse
+        yellow: 75.0 # percent, higher is worse
         red: 90.0    # percent, higher is worse
 
 ros_interface_node:

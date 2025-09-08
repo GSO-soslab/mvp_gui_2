@@ -1,4 +1,3 @@
-# mvp_gui/routes/routes_map.py
 from flask import (render_template, request, jsonify, redirect, url_for, 
                    send_from_directory, Response, Blueprint, current_app)
 from ..web_utils import db, sio_server
@@ -56,14 +55,17 @@ def waypoint_drag():
             
     return jsonify({"success": True})
 
-@map_bp.route('/tiles/<int:z>/<int:x>/<int:y>.png')
-def serve_tiles(z, x, y):
+@map_bp.route('/tiles/<map_type>/<int:z>/<int:x>/<int:y>.png')
+def serve_tiles(map_type, z, x, y):
+    if map_type not in ['satellite', 'noaa_chart']:
+        raise NotFound("Invalid map type specified.")
+
     pkg_share_dir = get_package_share_directory('mvp_gui_2')
-    # This path is now relative to the package share directory
-    tiles_dir = os.path.join(pkg_share_dir, 'mvp_gui_offline_map')
+    # This path now includes the map type subfolder
+    tiles_dir = os.path.join(pkg_share_dir, 'mvp_gui_offline_map', map_type)
 
     if not os.path.isdir(tiles_dir):
-        current_app.logger.error(f"Offline map base directory not found at: {tiles_dir}")
+        current_app.logger.error(f"Offline map directory not found for type '{map_type}' at: {tiles_dir}")
         raise NotFound()
 
     mbtiles_files = [os.path.join(tiles_dir, f) for f in sorted(os.listdir(tiles_dir)) if f.endswith(".mbtiles")]

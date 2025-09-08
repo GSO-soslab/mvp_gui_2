@@ -48,6 +48,13 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        # Include all launch files
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        # Include all mbtiles files from the satellite subdirectory
+        (os.path.join('share', package_name, 'mvp_gui_offline_map/satellite'), glob('mvp_gui_offline_map/satellite/*.mbtiles')),
+        # Include all mbtiles files from the noaa_chart subdirectory
+        (os.path.join('share', package_name, 'mvp_gui_offline_map/noaa_chart'), glob('mvp_gui_offline_map/noaa_chart/*.mbtiles')),
+
     ] + template_files + static_files,
     install_requires=[
         'setuptools',

@@ -218,7 +218,7 @@
     // --- Global State & Configuration ---
     let map; // The map object
     let isMapInitialized = false; // Becomes true ONLY when the map 'load' event has fired
-    let isOnlineMap = false; // Default to offline mode
+    let currentMapType = 'offline'; // Can be 'offline', 'online', or 'noaa'
     const MAX_HISTORY_POINTS = 150;
     const MAX_HISTORY_POINTS_GPS = 30;
     const MAP_STATE_KEY = 'mvpMapState';
@@ -326,7 +326,7 @@
     function saveMapState() {
         // We only save the view settings, history trails, and colors.
         const stateToSave = {
-            isOnline: isOnlineMap,
+            mapType: currentMapType,
             vehicleHistory: vehicleHistory,
             dynamicGPSHistories: dynamicGPSHistories,
             dynamicGPSColors: dynamicGPSColors,
@@ -344,7 +344,7 @@
         if (savedStateJSON) {
             try {
                 const savedState = JSON.parse(savedStateJSON);
-                isOnlineMap = savedState.isOnline ?? false; // Default to offline if not in saved state
+                currentMapType = savedState.mapType ?? 'offline'; // Default to offline if not in saved state
                 // Restore history trails and colors
                 vehicleHistory = savedState.vehicleHistory || [];
                 dynamicGPSHistories = savedState.dynamicGPSHistories || {};
@@ -377,7 +377,15 @@
     function updateMapStatusText() {
         const statusEl = document.getElementById('map-status');
         if (statusEl) {
-            statusEl.textContent = `Current Map: ${isOnlineMap ? 'Online' : 'Offline'}`;
+            let mapName;
+            if (currentMapType === 'online') {
+                mapName = 'Online (Satellite)';
+            } else if (currentMapType === 'noaa') {
+                mapName = 'NOAA Chart (Offline)';
+            } else { // 'offline'
+                mapName = 'Satellite (Offline)';
+            }
+            statusEl.textContent = `Current Map: ${mapName}`;
         }
     }
 
@@ -604,30 +612,48 @@
     function initializeMap(centerCoords, zoomLevel = 19) {
         if (map) return; // Prevent creating multiple map objects
 
-        const mapStyle = isOnlineMap ?
-            'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK' :
-            {
+        let mapStyle;
+        if (currentMapType === 'online') {
+            mapStyle = 'https://api.maptiler.com/maps/hybrid/style.json?key=XiFHd4BzZGlB2Dsix5mK';
+        } else if (currentMapType === 'noaa') {
+            mapStyle = {
                 "version": 8,
-                "name": "Offline Raster Style",
-                // For raster tiles, we define a raster source, not vector.
+                "name": "Offline NOAA Chart Style",
                 "sources": {
-                    "offline-raster-tiles": {
+                    "offline-noaa-tiles": {
                         "type": "raster",
-                        // Use the full URL to the .png tile endpoint.
-                        "tiles": [`${serverUrlRoot}tiles/{z}/{x}/{y}.png`],
-                        "tileSize": 256, // Standard for raster tiles
-                        // Set this to your mbtiles max zoom level.
+                        "tiles": [`${serverUrlRoot}tiles/noaa_chart/{z}/{x}/{y}.png`],
+                        "tileSize": 256,
+                        "attribution": "NOAA",
                         "maxzoom": 20
                     }
                 },
-                // The layers array defines what to draw. We just need one layer for the raster tiles.
-                // All other markers/paths are added on top of this later.
                 "layers": [{
-                    "id": "offline-raster-layer",
+                    "id": "offline-noaa-layer",
                     "type": "raster",
-                    "source": "offline-raster-tiles"
+                    "source": "offline-noaa-tiles"
                 }]
             };
+        } else { // 'offline' is the default, now treated as satellite
+            mapStyle = {
+                "version": 8,
+                "name": "Offline Satellite Style",
+                "sources": {
+                    "offline-satellite-tiles": {
+                        "type": "raster",
+                        "tiles": [`${serverUrlRoot}tiles/satellite/{z}/{x}/{y}.png`],
+                        "tileSize": 256,
+                        "maxzoom": 20
+                    }
+                },
+                "layers": [{
+                    "id": "offline-satellite-layer",
+                    "type": "raster",
+                    "source": "offline-satellite-tiles"
+                }]
+            };
+        }
+
         map = new maplibregl.Map({
             container: 'map',
             style: mapStyle,
@@ -1128,7 +1154,14 @@
         }
         document.getElementById('map-switch-button').addEventListener('click', () => {
             if (!map) return;
-            isOnlineMap = !isOnlineMap; // Toggle the map state
+            // Cycle through the map types: offline -> online -> noaa -> offline
+            if (currentMapType === 'offline') {
+                currentMapType = 'online';
+            } else if (currentMapType === 'online') {
+                currentMapType = 'noaa';
+            } else { // it must be 'noaa'
+                currentMapType = 'offline';
+            }
             updateMapStatusText();
             saveMapState();
             const center = map.getCenter();
