@@ -1,70 +1,54 @@
 {# mvp_gui/templates/map_page/states_table.html #}
-<table class="table table-hover table-dark mb-2">
-    <thead>
-        <tr>
-            <th scope="col">Controller state</th>
-            <th scope="col"></th>
-            <th scope="col"></th>
-        </tr>
-    </thead>
+<table class="table table-dark table-sm mb-2" style="table-layout: fixed;">
     <tbody>
         <tr>
-            <td id="controllerState">Unknown</td>
-            <td>
-                <form id="disableForm">
-                    <button type="submit" class="btn btn-lg btn-danger font-weight-bold">Disable</button>
-                </form>
+            <th scope="row" class="align-middle" style="width: 15%;">Controller State</th>
+            <td id="controllerState" class="align-middle text-center" style="width: 15%;">Unknown</td>
+            <td class="align-middle" style="width: 70%;">
+                <div class="btn-group w-100" role="group">
+                    <form id="enableForm" class="flex-fill">
+                        <button type="submit" class="btn btn btn-success font-weight-bold w-100">Enable</button>
+                    </form>
+                    <form id="disableForm" class="flex-fill">
+                        <button type="submit" class="btn btn btn-danger font-weight-bold w-100">Disable</button>
+                    </form>
+                </div>
             </td>
-            <td>
-                <form id="enableForm">
-                    <button type="submit" class="btn btn-lg btn-success font-weight-bold">Enable</button>
-                </form>
+        </tr>
+        <tr>
+            <th scope="row" class="align-middle" style="width: 15%;">Helm State</th>
+            <td id="currentState" class="align-middle text-center" style="width: 15%;">Unknown</td>
+            <td id="connectedStates" class="align-middle" style="width: 70%;">
+                <!-- Buttons injected by JS -->
             </td>
         </tr>
     </tbody>
 </table>
 
-<table class="table table-hover table-dark mb-2">
-    <thead>
-        <tr>
-            <th scope="col">Helm state</th>
-            <th scope="col">Connected states</th>
-        </tr>
-    </thead>
+<h5 class="mb-2">Map Controls</h5>
+<table class="table table-dark table-sm mb-2">
     <tbody>
         <tr>
-            <td id="currentState">Unknown</td>
-            <td id="connectedStates"></td>
+            <td>
+                <button id="map-switch-button" class="btn btn-secondary btn w-100">Switch Map Source</button>
+            </td>
+            <td colspan="2" id="map-status" class="text-center align-middle">
+                <!-- Status injected by JS -->
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <button id="add-user-marker-button" class="btn btn-info btn w-100">Add User Marker</button>
+            </td>
+            <td>
+                <button id="add-waypoint-button" class="btn btn-primary btn w-100">Add Waypoint</button>
+            </td>
+            <td>
+                <button id="publish-waypoints-button" class="btn btn-outline-warning btn font-weight-bold w-100">Publish Waypoints</button>
+            </td>
         </tr>
     </tbody>
 </table>
-
-<h5 class="mb-3">Map Controls</h5>
-<div> <!-- Container for all map interaction buttons -->
-    <!-- Row 1: Map Source Control & User Marker -->
-    <div class="row align-items-center mb-4">
-        <div class="col">
-            <button id="map-switch-button" class="btn btn-secondary btn-sm">Switch Map Source</button>
-        </div>
-        <div class="col">
-            <span id="map-status"></span>
-        </div>
-    </div>
-
-    <!-- Row 2: Add User Markers (Equal Width) -->
-    <div class="row mb-3">
-        <div class="col-sm-4">
-            <button id="add-user-marker-button" class="btn btn-info w-100">Add User Marker</button>
-        </div>
-        <div class="col-sm-4">
-            <button id="add-waypoint-button" class="btn btn-primary w-100">Add Waypoint</button>
-        </div>
-        <div class="col-sm-4">
-            <button id="publish-waypoints-button" class="btn btn-outline-warning font-weight-bold w-100">Publish
-                Waypoints</button>
-        </div>
-    </div>
-</div>
 
 <h5 class="mb-2">Vehicle Status</h5>
 <style>
