@@ -185,7 +185,7 @@ function initializeMap(centerCoords, zoomLevel = 19) {
                 'circle-radius': 3,
                 'circle-color': '#8400ffff',
                 'circle-stroke-color': '#ffffffff', 
-                'circle-stroke-width': 2,
+                'circle-stroke-width': 1,
                 'circle-opacity': 0.7
             }
         });

@@ -1,4 +1,5 @@
 {# mvp_gui/templates/map_page/states_table.html #}
+<h5 class="mt-2 mb-2">Vehicle Control</h5>
 <table class="table table-dark table-sm mb-2" style="table-layout: fixed;">
     <tbody>
         <tr>
@@ -25,7 +26,7 @@
     </tbody>
 </table>
 
-<h5 class="mb-2">Map Controls</h5>
+<h5 class="mb-2">Map Control</h5>
 <table class="table table-dark table-sm mb-2">
     <tbody>
         <tr>
@@ -189,9 +190,141 @@
     </table>
 </div>
 
+<h5 class="mb-2">Launch File Control</h5>
+<table class="table table-dark table-sm mb-2" style="table-layout: fixed;">
+    <tbody>
+        <tr>
+            <!-- Row 1: Dropdown -->
+            <td id="launchfile" class="align-middle text-center" style="width: 25%;">
+                <strong>Launch File: </strong>
+            </td>
+            <td class="align-middle" style="width: 75%;">
+                <select id="launchFileSelect" class="form-control form-control bg-dark text-white" style="border-color: #454d55;">
+                    <option value="">Select Launch File...</option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <!-- Row 2, Column 1: Status -->
+            <td id="selectedLaunchStatus" class="align-middle text-center" style="width: 25%;">
+                <strong>Unknown</strong>
+            </td>
+            <!-- Row 2, Column 2: Buttons -->
+            <td class="align-middle" style="width: 75%;">
+                <div class="btn-group w-100" role="group">
+                    <button id="launchSelectedFile" type="button" class="btn btn-sm btn-success font-weight-bold w-100">Launch</button>
+                    <button id="terminateSelectedFile" type="button" class="btn btn-sm btn-danger font-weight-bold w-100">Terminate</button>
+                </div>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         // This code runs only after the page is fully loaded
+
+        // --- LAUNCH CONTROL SCRIPT ---
+        const launchSelect = document.getElementById('launchFileSelect');
+        const launchStatusEl = document.getElementById('selectedLaunchStatus');
+        const launchBtn = document.getElementById('launchSelectedFile');
+        const terminateBtn = document.getElementById('terminateSelectedFile');
+
+        // Page-level cache for launch statuses
+        let launchStatuses = {};
+
+        // Function to update the status display for the selected launch file
+        function updateSelectedLaunchStatus() {
+            const selectedKey = launchSelect.value;
+            if (launchStatuses.hasOwnProperty(selectedKey)) {
+                const status = launchStatuses[selectedKey];
+                if (status === 1) {
+                    launchStatusEl.innerHTML = '<strong>Launched</strong>';
+                    launchStatusEl.style.color = 'lightgreen';
+                } else {
+                    launchStatusEl.innerHTML = '<strong>Not Launched</strong>';
+                    launchStatusEl.style.color = 'lightcoral';
+                }
+            } else {
+                launchStatusEl.innerHTML = '<strong>Unknown</strong>';
+                launchStatusEl.style.color = 'white';
+            }
+        }
+
+        // Populate dropdown with launch files from ROS node
+        socket.on('update_launch_keys', function (data) {
+            console.log('Received launch keys for map page:', data);
+            const keys = data.keys || [];
+            
+            // Save current selection to restore it after repopulating
+            const currentSelection = launchSelect.value;
+
+            launchSelect.innerHTML = '<option value="">Select Launch File...</option>'; // Clear existing options
+
+            keys.forEach(key => {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = key;
+                launchSelect.appendChild(option);
+            });
+            
+            // Restore selection if it still exists in the new list
+            if (keys.includes(currentSelection)) {
+                launchSelect.value = currentSelection;
+            }
+
+            // Update status for the (potentially new) selection
+            updateSelectedLaunchStatus();
+        });
+
+        // Update status cache and the display
+        socket.on('launch_status_update', function (data) {
+            console.log('Launch status update received on map page:', data);
+            const keys = data.keys || [];
+            const statuses = data.statuses || [];
+
+            // Update our page-level status cache
+            keys.forEach((key, index) => {
+                launchStatuses[key] = statuses[index];
+            });
+
+            // Update the display for the currently selected file
+            updateSelectedLaunchStatus();
+        });
+
+        // Add event listener for dropdown change to update status
+        launchSelect.addEventListener('change', updateSelectedLaunchStatus);
+
+        // Add event listeners for launch/terminate buttons
+        launchBtn.addEventListener('click', function() {
+            const selectedKey = launchSelect.value;
+            if (selectedKey) {
+                console.log(`Requesting to launch: ${selectedKey}`);
+                socket.emit('ros_action', {
+                    action: 'launch_file',
+                    key: selectedKey,
+                    status: true
+                });
+            } else {
+                alert('Please select a launch file first.');
+            }
+        });
+
+        terminateBtn.addEventListener('click', function() {
+            const selectedKey = launchSelect.value;
+            if (selectedKey) {
+                console.log(`Requesting to terminate: ${selectedKey}`);
+                socket.emit('ros_action', {
+                    action: 'launch_file',
+                    key: selectedKey,
+                    status: false
+                });
+            } else {
+                alert('Please select a launch file first.');
+            }
+        });
+        // --- END OF LAUNCH CONTROL SCRIPT ---
+
 
         // Listen for controller state updates
         socket.on('controller_state_update', function (data) {
