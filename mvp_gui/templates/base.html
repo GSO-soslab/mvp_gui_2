@@ -1,3 +1,4 @@
+{# mvp_gui/templates/base.html #}
 <!doctype html>
 <html lang="en">
 
@@ -62,6 +63,58 @@
                 }
             }
         });
+
+        // --- GLOBAL TIME SINCE UPDATE ---
+        const GLOBAL_THRESHOLDS = JSON.parse('{{ status_thresholds_json|safe }}');
+
+        // This handler updates the timestamp of the last received vehicle pose message.
+        // The timestamp is from the ROS message header, representing the data's actual age.
+        socket.on('vehicle_pose_update', (data) => {
+            if (data && data.header_timestamp) {
+                // The timestamp from ROS is in seconds since epoch. Store it.
+                sessionStorage.setItem('lastMessageRosTimestamp', data.header_timestamp);
+            }
+        });
+
+        // Update display elements every second
+        setInterval(function () {
+            // Use the ROS timestamp stored in session storage
+            const lastRosTimestamp = sessionStorage.getItem('lastMessageRosTimestamp');
+            const timeSinceUpdateElements = document.querySelectorAll('.time-since-update-display');
+
+            if (!lastRosTimestamp || timeSinceUpdateElements.length === 0) {
+                // If there's no stored time or no elements to update, do nothing.
+                return;
+            }
+
+            // lastRosTimestamp is in seconds since epoch. Date.now() is in milliseconds.
+            const timeSinceUpdate = (Date.now() / 1000) - parseFloat(lastRosTimestamp);
+            const timeThresholds = GLOBAL_THRESHOLDS.time_since_update;
+
+            let displayText;
+            if (timeSinceUpdate < 2) {
+                displayText = '&lt; 2 s'; // Use HTML entity
+            } else {
+                displayText = timeSinceUpdate.toFixed(0);
+            }
+
+            let colorClass = 'color-normal';
+            if (timeThresholds) {
+                if (timeSinceUpdate >= timeThresholds.red) {
+                    colorClass = 'color-red';
+                } else if (timeSinceUpdate >= timeThresholds.yellow) {
+                    colorClass = 'color-yellow';
+                }
+            }
+            
+            timeSinceUpdateElements.forEach(el => {
+                el.innerHTML = displayText;
+                // Carefully manage classes to avoid removing essential styling
+                el.classList.remove('color-normal', 'color-yellow', 'color-red');
+                el.classList.add(colorClass);
+            });
+
+        }, 1000); // Update once per second
     </script>
 
     <style>

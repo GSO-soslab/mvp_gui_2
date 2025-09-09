@@ -34,6 +34,7 @@ class FlaskNode(Node):
                 ('cpu_temp.yellow', 55.0), ('cpu_temp.red', 65.0),
                 ('cpu_usage.yellow', 75.0), ('cpu_usage.red', 90.0),
                 ('mem_usage.yellow', 75.0), ('mem_usage.red', 90.0),
+                ('time_since_update.yellow', 60.0), ('time_since_update.red', 180.0),
             ]
         )
         param_keys = [
@@ -41,6 +42,7 @@ class FlaskNode(Node):
             'voltage.yellow', 'voltage.red', 'current.yellow', 'current.red',
             'cpu_temp.yellow', 'cpu_temp.red', 'cpu_usage.yellow', 'cpu_usage.red',
             'mem_usage.yellow', 'mem_usage.red',
+            'time_since_update.yellow', 'time_since_update.red',
         ]
         params = self.get_parameters([f'status_thresholds.{key}' for key in param_keys])
         

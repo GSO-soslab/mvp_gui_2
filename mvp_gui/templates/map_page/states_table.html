@@ -1,3 +1,4 @@
+{# mvp_gui/templates/map_page/states_table.html #}
 <table class="table table-hover table-dark mb-2">
     <thead>
         <tr>
@@ -68,14 +69,14 @@
 <h5 class="mb-2">Vehicle Status</h5>
 <style>
     .status-table-compact {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         table-layout: fixed;
         /* Helps with consistent column widths */
     }
 
     .status-table-compact th,
     .status-table-compact td {
-        padding: 0.4rem;
+        padding: 0.3rem;
         vertical-align: middle;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -83,7 +84,7 @@
 
     .status-group-header {
         padding: 0rem;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         text-align: center;
         font-weight: bold;
         color: #6c757d;
@@ -99,7 +100,7 @@
     .status-value {
         font-family: 'Courier New', Courier, monospace;
         font-weight: bold;
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         text-align: center;
     }
 
@@ -127,6 +128,17 @@
 <div class="table-responsive">
     <table class="table table-dark table-bordered status-table-compact mb-2">
         <tbody>
+            <!-- Data Link Group -->
+            <tr>
+                <td colspan="4" class="status-group-header">Data Link</td>
+            </tr>
+            <tr>
+                <td class="status-label">System Time</td>
+                <td class="status-value" id="status-system-time">N/A</td>
+                <td class="status-label">Last Update [s]</td>
+                <td class="status-value time-since-update-display">N/A</td>
+            </tr>
+
             <!-- Position Group -->
             <tr>
                 <td colspan="4" class="status-group-header">Position</td>
@@ -327,6 +339,16 @@
         });
 
         socket.on('vehicle_pose_update', function (data) {
+            // The global script in base.html now handles resetting the timer.
+
+            if (data.header_timestamp) {
+                const sysTimeEl = document.getElementById('status-system-time');
+                if (sysTimeEl) {
+                    const updateTime = new Date(data.header_timestamp * 1000);
+                    sysTimeEl.textContent = updateTime.toLocaleTimeString('en-US', { hour12: false });
+                }
+            }
+
             updateStatusElement('status-lat', data.lat, 6);
             updateStatusElement('status-lon', data.lon, 6);
             updateStatusElement('status-alt', data.alt, 2);
