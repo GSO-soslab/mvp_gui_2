@@ -4,16 +4,16 @@
 const colorManager = {
     // A curated list of distinct, visually appealing colors.
     predefinedColors: [
-        '#33C4FF', // 1. Light Blue
-        '#FF6347', // 2. Tomato (Orange-Red)
-        '#BA55D3', // 3. Medium Orchid (Purple)
-        '#40E0D0', // 4. Turquoise (Cyan)
-        '#FF8C00', // 5. Dark Orange
-        '#EE82EE', // 6. Violet
-        '#6A5ACD', // 7. Slate Blue
-        '#F08080', // 8. Light Coral (Pinkish)
-        '#20B2AA', // 9. Light Sea Green (Teal)
-        '#C71585'  // 10. Medium Violet Red (Magenta)
+        '#33C4FF',      // 1. Light Blue
+        '#1dfa00ff',    // 2. Green
+        '#FF6347',      // 3. Tomato (Orange-Red)
+        '#40E0D0',      // 4. Turquoise (Cyan)
+        '#FF8C00',      // 5. Dark Orange
+        '#EE82EE',      // 6. Violet
+        '#b7fa00ff',    // 7. Light Green
+        '#F08080',      // 8. Light Coral (Pinkish)
+        '#20B2AA',      // 9. Light Sea Green (Teal)
+        '#C71585'       // 10. Medium Violet Red (Magenta)
     ],
 
     /**
@@ -173,7 +173,22 @@ function initializeMap(centerCoords, zoomLevel = 19) {
         // This code adds the sources and layers for the dynamic vector data (trails, paths).
         // It will work on top of both online and offline base maps.
         map.addSource('vehicle-trail', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
-        map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#44e215', 'line-width': 2, 'line-opacity': 0.7 } });
+        map.addLayer({ id: 'vehicle-trail-layer', type: 'line', source: 'vehicle-trail', paint: { 'line-color': '#8400ffff', 'line-width': 3, 'line-opacity': 0.7 } });
+
+        // Add source and layer for vehicle trail points
+        map.addSource('vehicle-trail-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+            id: 'vehicle-trail-points-layer',
+            type: 'circle',
+            source: 'vehicle-trail-points',
+            paint: {
+                'circle-radius': 3,
+                'circle-color': '#8400ffff',
+                'circle-stroke-color': '#ffffffff', 
+                'circle-stroke-width': 2,
+                'circle-opacity': 0.7
+            }
+        });
 
         map.addSource('editable-waypoints-route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } } });
         map.addLayer({ id: 'editable-waypoints-route-layer', type: 'line', source: 'editable-waypoints-route', paint: EDITABLE_PATH_STYLE_DEFAULT });
@@ -262,7 +277,19 @@ function updateVehicle(data) {
 
 function redrawAllTrails() {
     if (!isMapInitialized) return;
+    // Update line
     map.getSource('vehicle-trail')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: vehicleHistory } });
+
+    // Update points
+    const features = vehicleHistory.map(coords => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: coords },
+        properties: {}
+    }));
+    map.getSource('vehicle-trail-points')?.setData({
+        type: 'FeatureCollection',
+        features: features
+    });
 }
 
 // --- Editable Mission Path ---
@@ -571,7 +598,7 @@ function updateLegend() {
 
     // Static items
     const staticItems = [
-        { color: '#44e215', label: 'Vehicle Path' },
+        { color: '#8400ffff', label: 'Vehicle Path' },
         { color: '#ff190a', label: `Editable Mission: ${editablePathTotalDistance.toFixed(1)} m` },
         { color: '#ffd500', label: `Published Mission: ${publishedPathTotalDistance.toFixed(1)} m` }
     ];
