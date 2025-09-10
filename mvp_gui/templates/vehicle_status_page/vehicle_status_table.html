@@ -1,3 +1,4 @@
+{# mvp_gui/templates/vehicle_status_page/vehicle_status_table.html #}
 <style>
     .status-card {
         background-color: #343a40;
@@ -63,6 +64,25 @@
 <div class="row">
     <!-- Left Column -->
     <div class="col-md-6">
+        <!-- Data Link Status Card -->
+        <div class="card status-card text-white">
+            <div class="card-header">Data Link Status</div>
+            <div class="card-body p-0">
+                <table class="table table-dark table-striped status-table-full mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="status-label-full">Most Recent System Time</td>
+                            <td class="status-value-full" id="status-system-time">N/A</td>
+                        </tr>
+                        <tr>
+                            <td class="status-label-full">Time Since Last Update [s]</td>
+                            <td class="status-value-full time-since-update-display">N/A</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Vitals Card -->
         <div class="card status-card text-white">
             <div class="card-header">System Vitals</div>
@@ -93,7 +113,9 @@
                 </table>
             </div>
         </div>
-
+    </div>
+    <!-- Right Column -->
+    <div class="col-md-6">
         <!-- Position Card -->
         <div class="card status-card text-white">
             <div class="card-header">Position</div>
@@ -132,10 +154,7 @@
                 </table>
             </div>
         </div>
-    </div>
 
-    <!-- Right Column -->
-    <div class="col-md-6">
         <!-- Attitude Card -->
         <div class="card status-card text-white">
             <div class="card-header">Attitude</div>
@@ -193,6 +212,7 @@
                 </table>
             </div>
         </div>
+
     </div>
 </div>
 
@@ -252,6 +272,16 @@
         });
 
         socket.on('vehicle_pose_update', function (data) {
+            // The global script in base.html now handles resetting the timer.
+
+            if (data.header_timestamp) {
+                const sysTimeEl = document.getElementById('status-system-time');
+                if (sysTimeEl) {
+                    const updateTime = new Date(data.header_timestamp * 1000);
+                    sysTimeEl.textContent = updateTime.toLocaleTimeString('en-US', { hour12: false });
+                }
+            }
+
             // Position
             updateElement('status-lat', data.lat, 8);
             updateElement('status-lon', data.lon, 8);

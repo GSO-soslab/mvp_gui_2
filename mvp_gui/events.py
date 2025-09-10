@@ -59,15 +59,15 @@ def handle_disconnect():
 @sio_server.on('vehicle_pose_update')
 def handle_vehicle_pose_update(data):
     """Relay vehicle pose from ROS node to all browser clients in the room and cache it."""
-    global last_altimeter_range
-    last_altimeter_range = data # Store the latest pose
+    global last_vehicle_pose
+    last_vehicle_pose = data # Store the latest pose
     sio_server.emit('vehicle_pose_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('altimeter_update')
 def handle_altimeter_update(data):
-    """Relay vehicle pose from ROS node to all browser clients in the room and cache it."""
-    global last_vehicle_pose
-    last_vehicle_pose = data # Store the latest altimeter range
+    """Relay vehicle altimeter data from ROS node to all browser clients in the room and cache it."""
+    global last_altimeter_range
+    last_altimeter_range = data # Store the latest altimeter range
     sio_server.emit('altimeter_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('power_update')

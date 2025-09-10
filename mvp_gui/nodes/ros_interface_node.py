@@ -285,9 +285,14 @@ class RosInterfaceNode(Node):
     def synchronized_pose_callback(self, odom_msg, geo_pose_msg):
         if not self.sio.connected: 
             return
+        
+        # Extract header timestamp (seconds since epoch)
+        header_timestamp = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec / 1e9
+        
         q = geo_pose_msg.pose.orientation
         euler = euler_from_quaternion([q.x, q.y, q.z, q.w])
         pose_data = {
+            "header_timestamp": header_timestamp,
             "lat": geo_pose_msg.pose.position.latitude, "lon": geo_pose_msg.pose.position.longitude, "alt": geo_pose_msg.pose.position.altitude,
             "roll": np.rad2deg(euler[0]), "pitch": np.rad2deg(euler[1]), "yaw": np.rad2deg(euler[2]),
             "x": odom_msg.pose.pose.position.x, "y": odom_msg.pose.pose.position.y, "z": odom_msg.pose.pose.position.z,
