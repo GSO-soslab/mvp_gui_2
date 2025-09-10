@@ -1,0 +1,12 @@
+gps_topside:
+  ros__parameters:
+    # --- Topside GPS ---
+    # Serial port settings
+    port: "/dev/ttyACM0"
+    # port: "/dev/ttyUSB0"
+    baud: 9600
+    # ROS-specific settings
+    frame_id: "gps_topside_link"
+    time_ref_source: "gps_topside"
+    # NMEA message parsing options
+    useRMC: False
