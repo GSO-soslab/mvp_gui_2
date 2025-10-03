@@ -8,6 +8,9 @@
             <!-- Dynamically populated -->
         </ul>
     </div>
+
+    <!-- MEASUREMENT TOOL BUTTON -->
+    <button id="measure-button" class="btn btn-sm btn-secondary">Measure</button>
 </div>
 
 <style>
@@ -212,6 +215,48 @@
         /* Made smaller */
         border: 1px solid #ccc;
     }
+
+    /* --- Style for Map Scale Control --- */
+    .maplibregl-ctrl-scale {
+        /* Reset the previous box style */
+        background-color: transparent;
+        border-radius: 0;
+        padding: 2px 5px 0 5px; /* Horizontal padding, small top padding for text spacing */
+        box-shadow: none; /* In case any default shadow is applied */
+
+        /* Create the scale bar line and ticks using borders */
+        border-style: solid;
+        border-color: #ffffff; /* White lines for the scale */
+        border-width: 0 2px 2px 2px; /* 0 top, 2px right, 2px bottom, 2px left */
+        margin-bottom: 10px; /* Consistent spacing from the bottom edge */
+
+        /* Style the text for maximum clarity and visibility */
+        color: #ffffff; /* White text */
+        font-weight: bold;
+        font-size: 12px; /* Make text slightly more compact */
+        line-height: 1; /* Use a standard line-height for predictability */
+        text-align: center;
+    }
+
+    /* --- Styles for Measurement Tool --- */
+    #measure-button {
+        position: absolute;
+        bottom: 36px; /* Positioned to leave a clean gap above the scale control */
+        left: 10px;
+        z-index: 1000;
+        opacity: 0.75;
+    }
+
+    .measurement-label {
+        background-color: rgba(0, 0, 0, 0.7);
+        color: #00ffff; /* Cyan to match the line */
+        padding: 3px 7px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: bold;
+        border: 1px solid #00ffff;
+        white-space: nowrap; /* Prevent wrapping */
+    }
 </style>
 
 <!-- Load the helper functions first -->
@@ -266,6 +311,12 @@
     let userMarkersData = []; // Array of {id, lat, lon, name, color}
     let userMarkerObjects = {}; // Map of id -> maplibre marker object
 
+    // --- Measurement Tool ---
+    let isMeasuring = false;
+    let measurementPoints = [];
+    let measurementMarkers = [];
+    let measurementLabel = null;
+
     // --- WebSocket Event Handlers ---
     socket.on('vehicle_pose_update', (data) => {
         if (!data || data.lon === undefined || data.lat === undefined) return;
@@ -273,6 +324,7 @@
         updateHistory(vehicleHistory, data);
         if (!map) {
             initializeMap([data.lon, data.lat]);
+            addScaleToMap(); // Add scale control to the newly created map instance
         }
         if (isMapInitialized) {
             updateVehicle(data);
@@ -399,6 +451,7 @@
             // Re-initialize using the last known vehicle pose if available, otherwise the old center.
             const initCoords = currentVehiclePose ? [currentVehiclePose.lon, currentVehiclePose.lat] : [center.lng, center.lat];
             initializeMap(initCoords, zoom);
+            addScaleToMap(); // Add scale control to the newly created map instance
         });
 
         document.getElementById('publish-waypoints-button').addEventListener('click', () => {
@@ -407,11 +460,13 @@
 
         const addWaypointBtn = document.getElementById('add-waypoint-button');
         const addUserMarkerBtn = document.getElementById('add-user-marker-button');
+        const measureBtn = document.getElementById('measure-button');
 
         // --- Add Waypoint Button Logic ---
         addWaypointBtn.addEventListener('click', () => {
             if (!isMapInitialized) return;
             if (isAddingUserMarker) addUserMarkerBtn.click(); // Deactivate other mode
+            if (isMeasuring) measureBtn.click(); // Deactivate measurement mode
 
             isAddingWaypoint = !isAddingWaypoint;
             if (isAddingWaypoint) {
@@ -431,6 +486,7 @@
         addUserMarkerBtn.addEventListener('click', () => {
             if (!isMapInitialized) return;
             if (isAddingWaypoint) addWaypointBtn.click(); // Deactivate other mode
+            if (isMeasuring) measureBtn.click(); // Deactivate measurement mode
 
             isAddingUserMarker = !isAddingUserMarker;
             if (isAddingUserMarker) {
@@ -445,6 +501,38 @@
                 map.getCanvas().style.cursor = '';
             }
         });
+
+        // --- Measurement Button Logic ---
+        measureBtn.addEventListener('click', () => {
+            if (!isMapInitialized) return;
+
+            // If we are currently in "Clear Measurement" mode, just clear and exit.
+            if (measurementPoints.length === 2) {
+                clearMeasurement();
+                isMeasuring = false; // Explicitly exit measurement mode.
+                return;
+            }
+
+            // Deactivate other modes BEFORE toggling our own state to prevent recursion.
+            // When the other handlers are called, 'isMeasuring' is still false.
+            if (isAddingUserMarker) addUserMarkerBtn.click();
+            if (isAddingWaypoint) addWaypointBtn.click();
+
+            // Toggle measurement mode
+            isMeasuring = !isMeasuring;
+
+            if (isMeasuring) {
+                measureBtn.textContent = 'Click to place 1st point...';
+                measureBtn.classList.add('btn-warning');
+                measureBtn.classList.remove('btn-secondary');
+                map.getCanvas().style.cursor = 'crosshair';
+            } else {
+                // Cancel measurement if it was started but not finished
+                clearMeasurement(); // This also resets the button text and style
+                map.getCanvas().style.cursor = '';
+            }
+        });
+
 
         document.addEventListener('clear-history-trails', () => {
             console.log("Clear history trails event received.");

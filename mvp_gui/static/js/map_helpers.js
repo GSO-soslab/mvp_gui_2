@@ -197,6 +197,7 @@ function initializeMap(centerCoords, zoomLevel = 19) {
         map.addLayer({ id: 'published-waypoints-route-layer', type: 'line', source: 'published-waypoints-route', paint: { 'line-color': '#ffd500', 'line-width': 3, 'line-dasharray': [4, 2] } });
 
         isMapInitialized = true;
+        setupMeasurementTool(); // Initialize sources/layers for measurement tool
 
         // --- Map click logic for adding user marker ---
         map.on('click', (e) => {
@@ -235,6 +236,8 @@ function initializeMap(centerCoords, zoomLevel = 19) {
                 addWaypointBtn.classList.add('btn-primary');
                 addWaypointBtn.textContent = 'Add Waypoint';
                 map.getCanvas().style.cursor = '';
+            } else if (isMeasuring) {
+                handleMeasurementClick(e.lngLat);
             }
         });
 
@@ -246,6 +249,121 @@ function initializeMap(centerCoords, zoomLevel = 19) {
     });
 }
 
+// ============================================================================
+// SECTION 3.5: MEASUREMENT TOOL
+// ============================================================================
+/**
+ * Sets up the GeoJSON source and layer for the measurement line.
+ * Called once when the map is loaded.
+ */
+function setupMeasurementTool() {
+    map.addSource('measurement-line-source', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+    });
+    map.addLayer({
+        id: 'measurement-line-layer',
+        type: 'line',
+        source: 'measurement-line-source',
+        paint: {
+            'line-color': '#00ffff', // Cyan
+            'line-width': 3,
+            'line-dasharray': [2, 2]
+        }
+    });
+}
+
+/**
+ * Handles clicks on the map when the measurement tool is active.
+ * @param {maplibregl.LngLat} lngLat The coordinates of the click.
+ */
+function handleMeasurementClick(lngLat) {
+    // Add a point marker
+    const pointMarker = new maplibregl.Marker({ color: '#00ffff' })
+        .setLngLat(lngLat)
+        .addTo(map);
+    measurementMarkers.push(pointMarker);
+    measurementPoints.push([lngLat.lng, lngLat.lat]);
+
+    const measureBtn = document.getElementById('measure-button');
+
+    if (measurementPoints.length === 1) {
+        measureBtn.textContent = 'Click to place 2nd point...';
+    } else if (measurementPoints.length === 2) {
+        // Draw line and label
+        drawMeasurementLine();
+
+        // Finalize state
+        isMeasuring = false;
+        map.getCanvas().style.cursor = '';
+        measureBtn.textContent = 'Clear Measurement';
+        measureBtn.classList.remove('btn-warning');
+        measureBtn.classList.add('btn-danger');
+    }
+}
+
+/**
+ * Draws the measurement line and distance label after two points are selected.
+ */
+function drawMeasurementLine() {
+    if (measurementPoints.length < 2) return;
+
+    // Update the line source
+    map.getSource('measurement-line-source').setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: measurementPoints }
+    });
+
+    // Calculate distance and midpoint for the label
+    const p1 = { lon: measurementPoints[0][0], lat: measurementPoints[0][1] };
+    const p2 = { lon: measurementPoints[1][0], lat: measurementPoints[1][1] };
+    const distance = haversineDistance(p1, p2);
+    const midpoint = {
+        longitude: (p1.lon + p2.lon) / 2,
+        latitude: (p1.lat + p2.lat) / 2
+    };
+
+    // Create label element
+    const el = document.createElement('div');
+    el.className = 'measurement-label';
+    el.textContent = `${distance.toFixed(1)} m`;
+
+    // Add label marker to map
+    measurementLabel = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([midpoint.longitude, midpoint.latitude])
+        .addTo(map);
+}
+
+/**
+ * Clears all measurement artifacts from the map and resets the state.
+ */
+function clearMeasurement() {
+    // Remove markers
+    measurementMarkers.forEach(marker => marker.remove());
+    measurementMarkers = [];
+    if (measurementLabel) {
+        measurementLabel.remove();
+        measurementLabel = null;
+    }
+
+    // Clear line data
+    if (map && map.getSource('measurement-line-source')) {
+         map.getSource('measurement-line-source').setData({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: [] }
+        });
+    }
+
+    // Reset state
+    measurementPoints = [];
+
+    const measureBtn = document.getElementById('measure-button');
+    if(measureBtn) {
+        measureBtn.textContent = 'Measure';
+        measureBtn.classList.remove('btn-danger', 'btn-warning');
+        measureBtn.classList.add('btn-secondary');
+    }
+}
 
 // ============================================================================
 // SECTION 4: DATA & PATH DRAWING FUNCTIONS
@@ -588,6 +706,20 @@ function redrawUserMarkers() {
 // ============================================================================
 // SECTION 6: UI & ELEMENT CREATION HELPERS
 // ============================================================================
+// --- Map Enhancements ---
+function addScaleToMap() {
+    if (!map) return;
+    // The 'load' event fires once per map instance after all necessary resources have been loaded.
+    // It's the right place to add controls that depend on the map being fully ready.
+    map.on('load', () => {
+        // Add metric scale control (meters, kilometers)
+        const scalemetric = new maplibregl.ScaleControl({
+            maxWidth: 125, // in pixels
+            unit: 'metric'
+        });
+        map.addControl(scalemetric, 'bottom-left');
+    });
+}
 
 // --- Legend & Labels ---
 function updateLegend() {
