@@ -67,28 +67,29 @@
         // --- GLOBAL TIME SINCE UPDATE ---
         const GLOBAL_THRESHOLDS = JSON.parse('{{ status_thresholds_json|safe }}');
 
-        // This handler updates the timestamp of the last received vehicle pose message.
-        // The timestamp is from the ROS message header, representing the data's actual age.
+        // This handler records the wall-clock time when the last vehicle pose message was received.
+        // This allows for a correct "time since update" calculation even when replaying ROS bags,
+        // as it measures the real time elapsed since the last message arrived at the GUI.
         socket.on('vehicle_pose_update', (data) => {
             if (data && data.header_timestamp) {
-                // The timestamp from ROS is in seconds since epoch. Store it.
-                sessionStorage.setItem('lastMessageRosTimestamp', data.header_timestamp);
+                // Store the current browser wall-clock time (in milliseconds) when the message was received.
+                sessionStorage.setItem('lastMessageWallClockTimestamp', Date.now());
             }
         });
 
         // Update display elements every second
         setInterval(function () {
-            // Use the ROS timestamp stored in session storage
-            const lastRosTimestamp = sessionStorage.getItem('lastMessageRosTimestamp');
+            // Get the wall-clock timestamp of the last message from session storage.
+            const lastWallClockTimestamp = sessionStorage.getItem('lastMessageWallClockTimestamp');
             const timeSinceUpdateElements = document.querySelectorAll('.time-since-update-display');
 
-            if (!lastRosTimestamp || timeSinceUpdateElements.length === 0) {
+            if (!lastWallClockTimestamp || timeSinceUpdateElements.length === 0) {
                 // If there's no stored time or no elements to update, do nothing.
                 return;
             }
 
-            // lastRosTimestamp is in seconds since epoch. Date.now() is in milliseconds.
-            const timeSinceUpdate = (Date.now() / 1000) - parseFloat(lastRosTimestamp);
+            // Both timestamps are in milliseconds from the browser's clock. The result is in seconds.
+            const timeSinceUpdate = (Date.now() - parseFloat(lastWallClockTimestamp)) / 1000;
             const timeThresholds = GLOBAL_THRESHOLDS.time_since_update;
 
             let displayText;
