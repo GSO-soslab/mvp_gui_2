@@ -458,12 +458,20 @@
         socket.on('vehicle_pose_update', function (data) {
             // The global script in base.html now handles resetting the timer.
 
-            if (data.header_timestamp) {
-                const sysTimeEl = document.getElementById('status-system-time');
-                if (sysTimeEl) {
-                    const updateTime = new Date(data.header_timestamp * 1000);
-                    sysTimeEl.textContent = updateTime.toLocaleTimeString('en-US', { hour12: false });
-                }
+            const systemTimeEl = document.getElementById('status-system-time');
+            if (systemTimeEl) {
+                // To convert Date.now() to a hh:mm:ss format:
+                // 1. Create a Date object from the timestamp returned by Date.now().
+                const now = new Date(Date.now());
+                // 2. Use toLocaleTimeString() with options to format it.
+                //    'en-US' locale with hour12: false gives 24-hour time.
+                //    Specifying hour, minute, and second ensures all parts are present.
+                systemTimeEl.textContent = now.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
             }
 
             updateStatusElement('status-lat', data.lat, 6);
