@@ -46,10 +46,13 @@
             });
         };
 
+        let knownLaunchKeys = [];
+
         // --- Handler to build/update the tables with launch keys ---
         socket.on('update_launch_keys', function (data) {
             console.log('Received launch keys update:', data);
             const keys = data.keys || [];
+            knownLaunchKeys = keys;
             const controlTableBody = document.getElementById('launch-control-table-body');
             const statusTableBody = document.getElementById('launch-status-table-body');
 
@@ -105,26 +108,28 @@
         });
 
         // --- Status Updates via WebSocket ---
+        // Updated to handle raw ROS messages (e.g. Int16MultiArray) where data is in 'data.data' array
         socket.on('launch_status_update', function (data) {
-            console.log('Launch status update received:', data);
-            const keys = data.keys || [];
-            const statuses = data.statuses || [];
+            // data.data is the array of statuses
+            const statuses = (data && data.data) ? data.data : [];
 
-            keys.forEach((key, index) => {
-                const elementId = 'status-' + key.replace(/\//g, '-');
-                const statusCell = document.getElementById(elementId);
+            knownLaunchKeys.forEach((key, index) => {
+                if (index < statuses.length) {
+                    const elementId = 'status-' + key.replace(/\//g, '-');
+                    const statusCell = document.getElementById(elementId);
 
-                if (statusCell) {
-                    const status = statuses[index];
-                    if (status === 1) {
-                        statusCell.innerHTML = '<strong>Launched</strong>';
-                        statusCell.style.color = 'lightgreen';
+                    if (statusCell) {
+                        const status = statuses[index];
+                        if (status === 1) {
+                            statusCell.innerHTML = '<strong>Launched</strong>';
+                            statusCell.style.color = 'lightgreen';
+                        } else {
+                            statusCell.innerHTML = '<strong>Not Launched</strong>';
+                            statusCell.style.color = 'lightcoral';
+                        }
                     } else {
-                        statusCell.innerHTML = '<strong>Not Launched</strong>';
-                        statusCell.style.color = 'lightcoral';
+                        console.warn('Could not find status cell with ID:', elementId, '- Table might not be populated yet.');
                     }
-                } else {
-                    console.warn('Could not find status cell with ID:', elementId, '- Table might not be populated yet.');
                 }
             });
         });

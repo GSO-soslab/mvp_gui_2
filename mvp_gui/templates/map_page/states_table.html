@@ -230,8 +230,9 @@
         const launchBtn = document.getElementById('launchSelectedFile');
         const terminateBtn = document.getElementById('terminateSelectedFile');
 
-        // Page-level cache for launch statuses
+        // Page-level cache for launch statuses and keys
         let launchStatuses = {};
+        let knownLaunchKeys = [];
 
         // Function to update the status display for the selected launch file
         function updateSelectedLaunchStatus() {
@@ -255,6 +256,7 @@
         socket.on('update_launch_keys', function (data) {
             console.log('Received launch keys for map page:', data);
             const keys = data.keys || [];
+            knownLaunchKeys = keys;
             
             // Save current selection to restore it after repopulating
             const currentSelection = launchSelect.value;
@@ -278,15 +280,19 @@
         });
 
         // Update status cache and the display
+        // Updated to handle raw ROS messages (e.g. Int16MultiArray) where data is in 'data.data' array
         socket.on('launch_status_update', function (data) {
-            console.log('Launch status update received on map page:', data);
-            const keys = data.keys || [];
-            const statuses = data.statuses || [];
+            // data.data is the array of statuses
+            const statuses = (data && data.data) ? data.data : [];
 
-            // Update our page-level status cache
-            keys.forEach((key, index) => {
-                launchStatuses[key] = statuses[index];
-            });
+            // We use the last known keys to map statuses
+            if (knownLaunchKeys.length > 0) {
+                 knownLaunchKeys.forEach((key, index) => {
+                    if(index < statuses.length) {
+                        launchStatuses[key] = statuses[index];
+                    }
+                });
+            }
 
             // Update the display for the currently selected file
             updateSelectedLaunchStatus();
@@ -327,10 +333,12 @@
 
 
         // Listen for controller state updates
+        // Updated to handle raw ROS messages (e.g. Bool)
         socket.on('controller_state_update', function (data) {
             console.log('Controller state update received:', data);
+            const state = (data && data.data !== undefined) ? data.data : false;
             const controllerStateEl = document.getElementById('controllerState');
-            if (data.state) {
+            if (state) {
                 controllerStateEl.innerHTML = '<strong>Enabled</strong>';
                 // Use a brighter hex code for green
                 controllerStateEl.style.color = '#28a745';
@@ -342,10 +350,13 @@
         });
 
         // Listen for helm state updates
+        // Updated to handle raw ROS messages (e.g. HelmState)
         socket.on('helm_state_update', function (data) {
             console.log('Helm state update received:', data);
+            if (!data) return;
+            
+            const state = data.name;
             const currentStateEl = document.getElementById('currentState');
-            const state = data.current_state;
 
             currentStateEl.innerHTML = `<strong>${state}</strong>`;
 
@@ -444,15 +455,20 @@
             el.classList.add(colorClass);
         }
 
+        // Updated for raw ROS message parsing
         socket.on('power_info_update', function (data) {
-            updateStatusElement('status-voltage', data.voltage, 2, THRESHOLDS.voltage, true);
-            updateStatusElement('status-current', data.current, 2, THRESHOLDS.current);
+            if (data && data.data && data.data.length >= 2) {
+                updateStatusElement('status-voltage', data.data[0], 2, THRESHOLDS.voltage, true);
+                updateStatusElement('status-current', data.data[1], 2, THRESHOLDS.current);
+            }
         });
 
         socket.on('computer_info_update', function (data) {
-            updateStatusElement('status-cpu_temp', data.cpu_temp, 0, THRESHOLDS.cpu_temp);
-            updateStatusElement('status-cpu_usage', data.cpu_usage, 0, THRESHOLDS.cpu_usage);
-            updateStatusElement('status-mem_usage', data.mem_usage, 0, THRESHOLDS.mem_usage);
+             if (data && data.data && data.data.length >= 3) {
+                updateStatusElement('status-mem_usage', data.data[0], 0, THRESHOLDS.mem_usage);
+                updateStatusElement('status-cpu_temp', data.data[1], 0, THRESHOLDS.cpu_temp);
+                updateStatusElement('status-cpu_usage', data.data[2], 0, THRESHOLDS.cpu_usage);
+             }
         });
 
         socket.on('vehicle_pose_update', function (data) {
@@ -487,8 +503,11 @@
             updateStatusElement('status-pitch', data.pitch, 1, THRESHOLDS.pitch, false, true); // useAbs = true
         });
 
+        // Updated for raw ROS message parsing
         socket.on('altimeter_update', function (data) {
-            updateStatusElement('status-altimeter', data.altimeter_range, 2, THRESHOLDS.altimeter, true, true);
+            if(data && data.point) {
+                updateStatusElement('status-altimeter', data.point.z, 2, THRESHOLDS.altimeter, true, true);
+            }
         });
     });
 </script>

@@ -260,15 +260,23 @@
             el.classList.add(colorClass);
         }
 
+        // Updated to handle raw ROS messages (e.g. Float32MultiArray) where data is in 'data.data' array
         socket.on('power_info_update', function (data) {
-            updateElement('status-voltage', data.voltage, 2, THRESHOLDS.voltage, true);
-            updateElement('status-current', data.current, 2, THRESHOLDS.current);
+            // Assumes data.data = [voltage, current]
+            if (data && data.data && data.data.length >= 2) {
+                updateElement('status-voltage', data.data[0], 2, THRESHOLDS.voltage, true);
+                updateElement('status-current', data.data[1], 2, THRESHOLDS.current);
+            }
         });
 
+        // Updated to handle raw ROS messages (e.g. Float32MultiArray) where data is in 'data.data' array
         socket.on('computer_info_update', function (data) {
-            updateElement('status-cpu_temp', data.cpu_temp, 0, THRESHOLDS.cpu_temp);
-            updateElement('status-cpu_usage', data.cpu_usage, 0, THRESHOLDS.cpu_usage);
-            updateElement('status-mem_usage', data.mem_usage, 0, THRESHOLDS.mem_usage);
+            // Assumes data.data = [mem_usage, cpu_temp, cpu_usage]
+            if (data && data.data && data.data.length >= 3) {
+                updateElement('status-mem_usage', data.data[0], 0, THRESHOLDS.mem_usage);
+                updateElement('status-cpu_temp', data.data[1], 0, THRESHOLDS.cpu_temp);
+                updateElement('status-cpu_usage', data.data[2], 0, THRESHOLDS.cpu_usage);
+            }
         });
 
         socket.on('vehicle_pose_update', function (data) {
@@ -310,8 +318,11 @@
             updateElement('status-r', data.r, 1);
         });
 
+        // Updated to handle raw ROS messages (e.g. PointStamped)
         socket.on('altimeter_update', function (data) {
-            updateElement('status-altimeter', data.altimeter_range, 2, THRESHOLDS.altimeter, true, true);
+            if (data && data.point) {
+                updateElement('status-altimeter', data.point.z, 2, THRESHOLDS.altimeter, true, true);
+            }
         });
     });
 </script>

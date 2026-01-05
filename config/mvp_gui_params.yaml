@@ -40,31 +40,43 @@ flask_node:
 ros_interface_node:
   ros__parameters:
     #----------------------------
-    # Topics
+    # Namespaces
     #----------------------------
     topic_ns: "/mvp2_test_robot/remote/id_2/"
-    ## pose
-    poses_source: "odometry"
-    geo_pose_source: "geopose"
-    survey_geopath_source: "survey/geopath"
-    altimeter_source: "altimeter"
-    ## state
-    helm_state_get: "helm/state"
-    controller_state_get: "controller_state"
-    gpio_power_get: "gpio_power_state"
-    roslaunch_state_get: "roslaunch_state"
-    ## Info
-    computer_info_source: "computer_info"
-    power_info_source: "power_info"
+    service_ns: "/mvp2_test_robot/remote/id_2/"
 
     #----------------------------
-    # Services
+    # Explicit Sources (Complex Logic)
     #----------------------------
-    service_ns: "/mvp2_test_robot/remote/id_2/"
-    helm_state_set: "mvp_helm/change_state"
-    controller_state_set: "controller/set"
-    pub_waypoints_service: "mvp_helm/set_waypoints"
-    set_power_service: "gpio_manager/set_power/"
+    # These require specific synchronization logic, so they remain explicit
+    poses_source: "odometry"
+    geo_pose_source: "geopose"
     
+    #----------------------------
+    # Dynamic Topic Schema
+    #----------------------------
+    # Maps a topic suffix (key) to an internal Event ID (value)
+    # The code will scan for topic_ns + suffix.
+    topic_schema:
+      "altimeter": "altimeter_update"
+      "survey/geopath": "published_path_update"
+      "helm/state": "helm_state_update"
+      "controller_state": "controller_state_update"
+      "gpio_power_state": "power_update"
+      "roslaunch_state": "launch_status_update"
+      "computer_info": "computer_info_update"
+      "power_info": "power_info_update"
+
+    #----------------------------
+    # Dynamic Service Schema
+    #----------------------------
+    # Maps a service suffix (key) to a Service Type string (value)
+    service_schema:
+      "mvp_helm/change_state": "mvp_msgs/srv/SetString"
+      "controller/set": "std_srvs/srv/SetBool"
+      "mvp_helm/set_waypoints": "mvp_msgs/srv/SendWaypoints"
+      # Note: power and launch services are handled by the C2 discovery mechanism,
+      # but could be moved here if they were static names.
+
     # Name of the node to fetch dynamic launch/power configurations from
     c2_commander_node: "/mvp2_test_robot/mvp_c2_commander"

@@ -7,10 +7,14 @@ from .models import Waypoint
 BROADCAST_ROOM = 'all_clients_room'
 
 # --- Server-side cache for stateful data ---
-last_published_path = []
-last_vehicle_pose = None # Cache for vehicle pose
-last_altimeter_range = None # Cache for vehicle altimeter range
-last_launch_status = None # Cache for launch status
+# We use a dictionary to store latest states generically based on the event key
+state_cache = {
+    'published_path_update': [],
+    'vehicle_pose_update': None,
+    'altimeter_update': None,
+    'launch_status_update': None,
+    'power_update': None # Added power_update to cache the status array
+}
 
 # --- Handlers for built-in events ---
 @sio_server.on('connect')
@@ -23,12 +27,10 @@ def handle_connect():
     print(f'Client connected: {request.sid}, and joined room: "{BROADCAST_ROOM}"')
     
     # Immediately send the last known state to the connecting client
-    if last_published_path:
-        sio_server.emit('published_path_update', last_published_path, to=request.sid)
-    if last_vehicle_pose:
-        sio_server.emit('vehicle_pose_update', last_vehicle_pose, to=request.sid)
-    if last_altimeter_range:
-        sio_server.emit('altimeter_update', last_altimeter_range, to=request.sid)
+    # Iterate through cache and send if data exists
+    for event_key, data in state_cache.items():
+        if data:
+            sio_server.emit(event_key, data, to=request.sid)
 
     # Send cached GPS topics if they exist
     cached_gps_topics = current_app.config.get('_gps_topics_cache', [])
@@ -40,11 +42,12 @@ def handle_connect():
     if cached_launch_keys:
         print(f"Sending cached launch keys to new client {request.sid}")
         sio_server.emit('update_launch_keys', {'keys': cached_launch_keys}, to=request.sid)
-        
-    # Send cached launch status if it exists
-    if last_launch_status:
-        print(f"Sending cached launch status to new client {request.sid}")
-        sio_server.emit('launch_status_update', last_launch_status, to=request.sid)
+
+    # Send cached power keys if they exist
+    cached_power_keys = current_app.config.get('_power_keys_cache', [])
+    if cached_power_keys:
+        print(f"Sending cached power keys to new client {request.sid}")
+        sio_server.emit('update_power_keys', {'keys': cached_power_keys}, to=request.sid)
 
 
 @sio_server.on('disconnect')
@@ -56,58 +59,24 @@ def handle_disconnect():
 # --- Handlers for events FROM ros interface node, relayed TO broadcast room(flask node / browser) ---
 # We now emit to the room instead of using `broadcast=True`.
 
-@sio_server.on('vehicle_pose_update')
-def handle_vehicle_pose_update(data):
-    """Relay vehicle pose from ROS node to all browser clients in the room and cache it."""
-    global last_vehicle_pose
-    last_vehicle_pose = data # Store the latest pose
-    sio_server.emit('vehicle_pose_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('altimeter_update')
-def handle_altimeter_update(data):
-    """Relay vehicle altimeter data from ROS node to all browser clients in the room and cache it."""
-    global last_altimeter_range
-    last_altimeter_range = data # Store the latest altimeter range
-    sio_server.emit('altimeter_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('power_update')
-def handle_power_update(data):
-    """Relay power status from ROS node to all browser clients in the room."""
-    sio_server.emit('power_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('power_info_update')
-def handle_power_info_update(data):
-    """Relay power status from ROS node to all browser clients in the room."""
-    sio_server.emit('power_info_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('computer_info_update')
-def handle_computer_info_update(data):
-    """Relay power status from ROS node to all browser clients in the room."""
-    sio_server.emit('computer_info_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('helm_state_update')
-def handle_helm_state_update(data):
-    """Relay helm state from ROS node to all browser clients in the room."""
-    sio_server.emit('helm_state_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('controller_state_update')
-def handle_controller_state_update(data):
-    """Relay controller state from ROS node to all browser clients in the room."""
-    sio_server.emit('controller_state_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
-
-@sio_server.on('launch_status_update')
-def handle_launch_status_update(data):
-    """Relay launch status from ROS node to all browser clients in the room and cache it."""
-    global last_launch_status
-    last_launch_status = data # Cache the latest status
-    sio_server.emit('launch_status_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+@sio_server.on('generic_ros_update')
+def handle_generic_ros_update(payload):
+    """
+    Standardized handler for ROS updates.
+    Expects payload: {'key': 'event_name', 'data': ...}
+    """
+    event_key = payload.get('key')
+    data = payload.get('data')
     
-@sio_server.on('published_path_update')
-def handle_published_path_update(data):
-    """Relay published path from ROS node to all browser clients, and cache it."""
-    global last_published_path
-    last_published_path = data  # Cache the latest path
-    sio_server.emit('published_path_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+    if not event_key:
+        return
+
+    # Update cache if this key is tracked in state_cache
+    if event_key in state_cache:
+        state_cache[event_key] = data
+
+    # Relay to all clients
+    sio_server.emit(event_key, data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('update_launch_keys')
 def handle_update_launch_keys(data):
@@ -122,6 +91,16 @@ def handle_update_launch_keys(data):
     current_app.config['_launch_keys_cache'] = keys
     # Relay this update to all browser clients in the room.
     sio_server.emit('update_launch_keys', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
+@sio_server.on('update_power_keys')
+def handle_update_power_keys(data):
+    """
+    Event handler for when the ROS node sends the list of power devices (gpio keys).
+    """
+    keys = data.get('keys', [])
+    print(f"Received power key update from ROS node, relaying to browsers: {keys}")
+    current_app.config['_power_keys_cache'] = keys
+    sio_server.emit('update_power_keys', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
 @sio_server.on('gps_topics_discovered')
 def handle_gps_topics_discovered(data):

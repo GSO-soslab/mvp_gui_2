@@ -347,8 +347,22 @@
         updateDynamicGPS(data.topic, data.data);
     });
 
+    // Updated to handle raw ROS messages (e.g. mvp_msgs/Path) where waypoints are in 'data.wpt'
     socket.on('published_path_update', (data) => {
-        lastPublishedPath = data || [];
+        // data.wpt is the list of Waypoint objects
+        const rawWaypoints = (data && data.wpt) ? data.wpt : [];
+        
+        // Transform the raw structure back to what the drawPublishedPath function expects
+        // Expects: [{lat, lon, alt, surge}, ...]
+        lastPublishedPath = rawWaypoints.map(w => {
+            return {
+                lat: w.ll_wpt.latitude,
+                lon: w.ll_wpt.longitude,
+                alt: w.ll_wpt.altitude,
+                surge: w.u
+            };
+        });
+
         if (isMapInitialized) {
             drawPublishedPath();
         }
