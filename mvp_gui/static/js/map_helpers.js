@@ -448,6 +448,7 @@ function drawPublishedPath() {
     let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge ?? p.u ?? 0 }));
     publishedPathTotalDistance = calculateTotalDistance(linePoints);
     updateLegend();
+    updateWaypointsTable(canonicalPath);
 
     if (canonicalPath.length === 0) {
         map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
@@ -775,6 +776,33 @@ function createSegmentLabel(midpoint, type, color) {
     }).setLngLat([midpoint.longitude, midpoint.latitude]).addTo(map);
 }
 
+function updateWaypointsTable(pathData) {
+    const wrapper = document.getElementById('waypoints-table-wrapper');
+    const tbody = document.getElementById('waypoints-table-body');
+    if (!wrapper || !tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (!pathData || pathData.length === 0) {
+        wrapper.style.display = 'none';
+        return;
+    }
+
+    wrapper.style.display = 'block';
+
+    pathData.forEach((point, index) => {
+        const row = document.createElement('tr');
+        const depth = point.alt ?? 0;
+        const velocity = point.surge ?? point.u ?? 0;
+        row.innerHTML = `
+            <td>${index}</td>
+            <td>${depth.toFixed(1)}</td>
+            <td>${velocity.toFixed(1)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
 function updateMapStatusText() {
     const statusEl = document.getElementById('map-status');
     if (statusEl) {
@@ -852,6 +880,22 @@ function createUserMarker(markerData) {
 
     container.appendChild(markerEl);
     container.appendChild(labelEl);
+
+    container.addEventListener('click', () => {
+        if (isErasingUserMarker) {
+            const markerIndex = userMarkersData.findIndex(m => m.id === markerData.id);
+            if (markerIndex > -1) {
+                userMarkersData.splice(markerIndex, 1);
+            }
+            const markerObject = userMarkerObjects[markerData.id];
+            if (markerObject) {
+                markerObject.remove();
+                delete userMarkerObjects[markerData.id];
+            }
+            updateLegend();
+            saveMapState();
+        }
+    });
 
     container.addEventListener('dblclick', () => {
         // Populate and show the modal for editing
