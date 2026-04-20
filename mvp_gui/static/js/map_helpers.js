@@ -379,6 +379,7 @@ function redrawAllFromState() {
     // Redraw paths using live data
     updateEditablePathLine();
     drawPublishedPath();
+    updateLegend();
 }
 
 // --- Vehicle Path ---
@@ -424,7 +425,6 @@ function updateEditablePathLine() {
     }
 
     editablePathTotalDistance = calculateTotalDistance(pathPoints);
-    updateLegend();
 
     const lineCoords = pathPoints.map(p => [p.lon, p.lat]);
     map.getSource('editable-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } });
@@ -447,8 +447,8 @@ function drawPublishedPath() {
     // The ROS node might send 'u' for surge, so handle both 'surge' and 'u' robustly.
     let linePoints = canonicalPath.map(p => ({ lat: p.lat, lon: p.lon, alt: p.alt, surge: p.surge ?? p.u ?? 0 }));
     publishedPathTotalDistance = calculateTotalDistance(linePoints);
-    updateLegend();
-    updateWaypointsTable(canonicalPath);
+    // Skip the first element (vehicle pose) to show only actual waypoints in the table
+    updateWaypointsTable(linePoints.slice(1));
 
     if (canonicalPath.length === 0) {
         map.getSource('published-waypoints-route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
@@ -667,6 +667,7 @@ function createEditableWaypointMarkers() {
                 draggedWaypoint.lat = coords.lat;
             }
             updateEditablePathLine();
+            updateLegend();
         });
         marker.on('dragend', () => {
             el.classList.remove('marker-dragging');
@@ -795,7 +796,7 @@ function updateWaypointsTable(pathData) {
         const depth = point.alt ?? 0;
         const velocity = point.surge ?? point.u ?? 0;
         row.innerHTML = `
-            <td>${index}</td>
+            <td>${index + 1}</td>
             <td>${depth.toFixed(1)}</td>
             <td>${velocity.toFixed(1)}</td>
         `;
@@ -881,7 +882,8 @@ function createUserMarker(markerData) {
     container.appendChild(markerEl);
     container.appendChild(labelEl);
 
-    container.addEventListener('click', () => {
+    container.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (isErasingUserMarker) {
             const markerIndex = userMarkersData.findIndex(m => m.id === markerData.id);
             if (markerIndex > -1) {
@@ -891,6 +893,16 @@ function createUserMarker(markerData) {
             if (markerObject) {
                 markerObject.remove();
                 delete userMarkerObjects[markerData.id];
+            }
+            isErasingUserMarker = false;
+            const addUserMarkerBtn = document.getElementById('add-user-marker-button');
+            if (addUserMarkerBtn) {
+                addUserMarkerBtn.classList.remove('btn-danger');
+                addUserMarkerBtn.classList.add('btn-info');
+                addUserMarkerBtn.textContent = 'Add User Marker';
+            }
+            if (map) {
+                map.getCanvas().style.cursor = '';
             }
             updateLegend();
             saveMapState();
