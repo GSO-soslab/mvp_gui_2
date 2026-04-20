@@ -25,6 +25,12 @@ MVP GUI 2 is a comprehensive web-based graphical user interface designed for mon
         
         pip install Flask-WTF (pip install Flask-WTF --break-system-packages)
         ```
+    - if error shows up `AttributeError: property 'session' of 'RequestContext' object has no setter`,
+    do the following:
+        ```bash
+        sudo apt purge python3-flask-socketio
+        pip install Flask-SocketIO
+        ```
 
 3.  Clone required dependency repositories (if not available via `rosdep`), e.g.:
     ```bash
