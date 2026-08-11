@@ -46,6 +46,7 @@ class RosInterfaceNode(Node):
                 ('controller_state_set', 'controller/set'),
                 ('pub_waypoints_service', 'mvp_helm/set_waypoints'),
                 ('set_power_service', 'gpio_manager/set_power/'),
+                ('pwm_cmd_topic', 'pwm_cmd'),
                 ('c2_commander_node', ''),
             ]
         )
@@ -60,6 +61,9 @@ class RosInterfaceNode(Node):
 
         # To track dynamically added subscribers
         self.dynamic_subscribers = {}
+
+        # Lumen brightness state (0.0 - 1.0)
+        self.lumen_brightness = 0.0
 
         self.setup_ros_communications()
         self.setup_sio_handlers()
@@ -123,6 +127,11 @@ class RosInterfaceNode(Node):
         self.set_helm_state_client = self.create_client(SetString, self.get_service('helm_state_set'), callback_group=self.callback_group)
         self.set_controller_state_client = self.create_client(SetBool, self.get_service('controller_state_set'), callback_group=self.callback_group)
         self.pub_waypoints_client = self.create_client(SendWaypoints, self.get_service('pub_waypoints_service'), callback_group=self.callback_group)
+
+        # --- PWM command publisher (e.g. lumen light brightness) ---
+        pwm_cmd_topic = self.get_topic('pwm_cmd_topic')
+        self.pwm_cmd_pub = self.create_publisher(Float32MultiArray, pwm_cmd_topic, 10, callback_group=self.callback_group)
+        self.get_logger().info(f"Publishing PWM commands on topic '{pwm_cmd_topic}'.")
 
     def try_fetch_and_setup_dynamic_clients(self):
         if self.param_fetch_timer: 
@@ -210,6 +219,7 @@ class RosInterfaceNode(Node):
                 'publish_waypoints': lambda d: self.call_publish_waypoints(d.get('waypoints')),
                 'set_power': lambda d: self.call_set_power(d.get('name'), d.get('status')),
                 'launch_file': lambda d: self.call_launch_file(d.get('key'), d.get('status')),
+                'adjust_lumen': lambda d: self.call_adjust_lumen(d.get('value')),
             }
             if action in actions:
                 actions[action](data)
@@ -328,6 +338,24 @@ class RosInterfaceNode(Node):
         client = self.power_clients.get(name)
         if client and self._check_service(client):
             client.call_async(SetBool.Request(data=bool(status)))
+
+    def call_adjust_lumen(self, direction):
+        step = 0.1
+        if direction == 'increase':
+            self.lumen_brightness = min(1.0, self.lumen_brightness + step)
+        elif direction == 'decrease':
+            self.lumen_brightness = max(0.0, self.lumen_brightness - step)
+        else:
+            self.get_logger().warn(f"Unknown adjust_lumen direction: {direction}")
+            return
+
+        msg = Float32MultiArray()
+        msg.data = [0.0, self.lumen_brightness]  # index 0 = lumen light
+        self.pwm_cmd_pub.publish(msg)
+        self.get_logger().info(f"Set lumen brightness to {self.lumen_brightness:.1f}")
+
+        if self.sio.connected:
+            self.sio.emit('lumen_update', {'brightness': self.lumen_brightness})
 
     def call_set_helm_state(self, state_name):
         if self._check_service(self.set_helm_state_client):

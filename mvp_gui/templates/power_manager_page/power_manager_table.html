@@ -116,6 +116,15 @@
             action: 'adjust_lumen',
             value: direction
         });
-        // Note: The lumen brightness display would be updated by a corresponding socket.on event.
     }
+
+    socket.on('lumen_update', function (data) {
+        const brightness = data.brightness;
+        if (brightness !== undefined) {
+            const display = document.getElementById('lumen-brightness-display');
+            if (display) {
+                display.textContent = Math.round(brightness * 100) + '%';
+            }
+        }
+    });
 </script>

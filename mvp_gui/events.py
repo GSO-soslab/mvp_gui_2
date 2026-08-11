@@ -75,6 +75,11 @@ def handle_power_update(data):
     """Relay power status from ROS node to all browser clients in the room."""
     sio_server.emit('power_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
 
+@sio_server.on('lumen_update')
+def handle_lumen_update(data):
+    """Relay lumen brightness from ROS node to all browser clients in the room."""
+    sio_server.emit('lumen_update', data, to=BROADCAST_ROOM, skip_sid=request.sid)
+
 @sio_server.on('power_info_update')
 def handle_power_info_update(data):
     """Relay power status from ROS node to all browser clients in the room."""
